@@ -14,8 +14,8 @@ class Parser {
     private class VariableTable {
 
         private final VariableTable enclosing;
-        private final Map<Token, Token> name_type = new HashMap<>();
-        private final Set<Token> constants = new HashSet<>();
+        private final Map<String, Token> name_type = new HashMap<>();
+        private final Set<String> constants = new HashSet<>();
 
         VariableTable() {
             this.enclosing = null;
@@ -25,18 +25,18 @@ class Parser {
             this.enclosing = enclosing;
         }
 
-        Token add(Token name, Token type, boolean isConst) {
+        Token add(String name, Token type, boolean isConst) {
             if (isConst)
                 constants.add(name);
 
             return name_type.put(name, type);
         }
 
-        boolean isConstant(Token name) {
+        boolean isConstant(String name) {
             return constants.contains(name);
         }
 
-        Token getType(Token name) {
+        Token getType(String name) {
             if (name_type.containsKey(name)) {
                 return name_type.get(name);
             }
@@ -117,7 +117,7 @@ class Parser {
         }
         
         consume(NL, "Expect a new line after variable/constant declaration.");
-        Token previous_type = variableTable.add(name, varType, isConst);
+        Token previous_type = variableTable.add(name.lexeme, varType, isConst);
         if (previous_type != null) {
             throw error(name, "Variable '" + name.lexeme + "' already defined in this scope.");
         }
@@ -204,7 +204,7 @@ class Parser {
         if (expr instanceof Expr.Variable) {
             Expr.Variable varExpr = (Expr.Variable)expr;
 
-            if (variableTable.isConstant(varExpr.name)) {
+            if (variableTable.isConstant(varExpr.name.lexeme)) {
                 throw error(varExpr.name, "Cannot assign to constant.");
             }
 
@@ -455,19 +455,19 @@ class Parser {
         }
 
         if (match(LEFT_SQUARE)) {
-            List<Expr> elements = new ArrayList<>();
+            List<Expr> items = new ArrayList<>();
             if (!check(RIGHT_SQUARE)) {
                 do {
                     // comma expression is not allowed
-                    elements.add(ternaryConditional());
+                    items.add(ternaryConditional());
                 } while (match(COMMA));
             }
             consume(RIGHT_SQUARE, "Expect ']' after list.");
-            return new Expr.List_(elements, new Token(LIST_TYPE, "list", null, previous().line));
+            return new Expr.List_(items, new Token(LIST_TYPE, "list", null, previous().line));
         }
 
         if (match(IDENTIFIER)) {
-            Token id_type = variableTable.getType(previous());
+            Token id_type = variableTable.getType(previous().lexeme);
             
             if (id_type == null) {
                 throw error(previous(), "Undefined variable '" + previous().lexeme + "'.");

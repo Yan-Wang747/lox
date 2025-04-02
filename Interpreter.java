@@ -79,6 +79,19 @@ class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
             return text;
         }
 
+        if (object instanceof ArrayList<?>) {
+            StringBuilder sb = new StringBuilder("[");
+            List<Object> list = (ArrayList<Object>) object;
+            for (int i = 0; i < list.size(); i++) {
+                sb.append(stringify(list.get(i)));
+                if (i < list.size() - 1) {
+                    sb.append(", ");
+                }
+            }
+            sb.append("]");
+            return sb.toString();
+        }
+
         return object.toString();
     }
 
