@@ -2,7 +2,9 @@ package lox;
 
 import java.util.List;
 
-abstract class Stmt {
+public abstract class Stmt {
+
+
 
     interface Visitor<R> {
         R visit(If stmt);
@@ -95,10 +97,12 @@ abstract class Stmt {
 
         final Token name;
         final Expr initializer;
+        final boolean isConst;
 
-        VarDecl(Token name, Expr initializer) {
+        VarDecl(Token name, Expr initializer, boolean isConst) {
             this.name = name;
             this.initializer = initializer;
+            this.isConst = isConst;
         }
 
         @Override

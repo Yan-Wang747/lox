@@ -70,10 +70,10 @@ class Lox{
     }
 
     static void error(Token token, String message) {
-        if (token.type == TokenType.EOF) {
+        if (token.tokenType == TokenType.EOF) {
             report(token.line, " at end", message);
         }
-        else if (token.type == TokenType.EOS) {
+        else if (token.tokenType == TokenType.NL) {
             report(token.line, " at EOS", message);
         }
         else {

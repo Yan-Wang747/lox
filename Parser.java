@@ -1,10 +1,55 @@
 package lox;
 
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
 import static lox.TokenType.*;
 
 class Parser {
+
+    private class VariableTable {
+
+        private final VariableTable enclosing;
+        private final Map<Token, Token> name_type = new HashMap<>();
+        private final Set<Token> constants = new HashSet<>();
+
+        VariableTable() {
+            this.enclosing = null;
+        }
+
+        VariableTable(VariableTable enclosing) {
+            this.enclosing = enclosing;
+        }
+
+        Token add(Token name, Token type, boolean isConst) {
+            if (isConst)
+                constants.add(name);
+
+            return name_type.put(name, type);
+        }
+
+        boolean isConstant(Token name) {
+            return constants.contains(name);
+        }
+
+        Token getType(Token name) {
+            if (name_type.containsKey(name)) {
+                return name_type.get(name);
+            }
+
+            if (enclosing != null) 
+                return enclosing.getType(name);
+
+            return null;
+        }
+    }
+
+    private VariableTable variableTable = new VariableTable();
+    
     private static class ParseError extends RuntimeException {}
 
     private final List<Token> tokens;
@@ -18,12 +63,13 @@ class Parser {
         List<Stmt> statements = new ArrayList<>();
         while (!isAtEnd() && !check(RIGHT_BRACE)) {
             // skip empty lines
-            if (match(EOS)) 
+            if (match(NL)) 
                 continue;
 
             try {
                 statements.add(declaration());
-            }catch (ParseError error) {
+            }
+            catch (ParseError error) {
                 synchronize();
             }
         }
@@ -33,28 +79,62 @@ class Parser {
 
     private Stmt declaration() {
         if (match(VAR))
-            return varDeclaration();
+            return varDeclaration(false);
+
+        if (match(CONST))
+            return varDeclaration(true);
 
         return statement();
     }
 
-    private Stmt varDeclaration() {
-        Token name = consume(IDENTIFIER, "Expect variable name.");
-        consume(EQUAL, "Expect '=' after variable name.");
+    private Stmt varDeclaration(boolean isConst) {
+        Token name = consume(IDENTIFIER, "Expect variable/constant name.");
+        Token varType = null;
+        if (match(COLON)) {
+            varType = advance();
+            if (varType.isNotTokenType(NUM_TYPE) && 
+                varType.isNotTokenType(STR_TYPE) && 
+                varType.isNotTokenType(BOOL_TYPE) && 
+                varType.isNotTokenType(LIST_TYPE)) {
+                throw error(name, "Invalid type '" + varType.lexeme + "'.");
+            }
+        }
+
+        consume(EQUAL, "Expect '=' after variable/constant name.");
 
         Expr initializer = expression();
 
-        consume(EOS, "Expect a new line after variable declaration.");
-        return new Stmt.VarDecl(name, initializer);
+        if (varType == null){
+            if (initializer.valueType.isTokenType(NIL)) {
+                throw error(name, "Initializer cannot be nil, type unknown.");
+            }
+            varType = initializer.valueType;
+        }
+        else {
+            if (varType.isNotTokenType(initializer.valueType.tokenType) && initializer.valueType.isNotTokenType(NIL)) {
+                throw error(name, "Initializer type '" + initializer.valueType.lexeme + "' does not match variable type '" + varType.lexeme + "'.");
+            }
+        }
+        
+        consume(NL, "Expect a new line after variable/constant declaration.");
+        Token previous_type = variableTable.add(name, varType, isConst);
+        if (previous_type != null) {
+            throw error(name, "Variable '" + name.lexeme + "' already defined in this scope.");
+        }
+
+        return new Stmt.VarDecl(name, initializer, isConst);
     }
     
     private Stmt statement() {
+        if (match(NL))
+            return null;
+
         if (match(IF)) {
             return ifStatement();
         }
 
         if (match(LEFT_BRACE)) {
-            return new Stmt.Block(block());
+            return new Stmt.Block(block(new VariableTable(this.variableTable)));
         }
 
         if (match(PRINT)) {
@@ -86,41 +166,65 @@ class Parser {
         return new Stmt.If(condition, thenBranch, elseBranch);
     }
     
-    private List<Stmt> block() {
-        List<Stmt> statements = parse();
+    private List<Stmt> block(VariableTable newVariableTable) {
+        VariableTable enclosing = this.variableTable;
+        this.variableTable = newVariableTable;
+        try {
+            consume(NL, "Expect a new line after '{'.");
 
-        consume(RIGHT_BRACE, "Expect '}' after block.");
-        return statements;
+            List<Stmt> statements = parse();
+            consume(RIGHT_BRACE, "Expect '}' after block.");
+            consume(NL, "Expect a new line after '}'.");
+            return statements;
+        }
+        finally {
+            this.variableTable = enclosing;
+        }
     }
     
     private Stmt printStatement() {
         Expr value = expression();
-        consume(EOS, "Expect a new line after the print statement.");
+        consume(NL, "Expect a new line after the print statement.");
         return new Stmt.Print(value);
     }
     
     private Stmt assignmentStatement(Expr expr) {
         Token name = get_left_value(expr);
         Expr r_value = expression();
-        consume(EOS, "Expect a new line after assignment.");
+
+        if (valueTypeIsDifferent(expr, r_value) && r_value.valueType.isNotTokenType(NIL)) {
+            throw error(name, "requires both operands to be of the same type.");
+        }
+
+        consume(NL, "Expect a new line after assignment.");
         return new Stmt.Assign(name, r_value);
     }
 
     private Token get_left_value(Expr expr) {
         if (expr instanceof Expr.Variable) {
-            return ((Expr.Variable) expr).name;
+            Expr.Variable varExpr = (Expr.Variable)expr;
+
+            if (variableTable.isConstant(varExpr.name)) {
+                throw error(varExpr.name, "Cannot assign to constant.");
+            }
+
+            return varExpr.name;
         }
         
         if (expr instanceof Expr.Grouping)
             return get_left_value(((Expr.Grouping) expr).expression);
 
-        // previous is =
+        // previous token is '=''
         throw error(previous(), "Invalid l-value of assignment.");
     }
 
     private Stmt expressionStatement(Expr expr) {
-        consume(EOS, "Expect a new line after expression.");
+        consume(NL, "Expect a new line after expression.");
         return new Stmt.Expression(expr);
+    }
+
+    private boolean valueTypeIsDifferent(Expr exp1, Expr exp2) {
+        return exp1.valueType.isNotTokenType(exp2.valueType.tokenType);
     }
 
     private Expr expression() {
@@ -140,8 +244,14 @@ class Parser {
 
         while (match(COMMA)) {
             Token operator = previous();
+            while (match(NL)); // skip empty lines
             Expr right = ternaryConditional();
-            expr = new Expr.Binary(expr, operator, right);
+
+            if (valueTypeIsDifferent(expr, right)) {
+                throw error(operator, "requires both operands to be of the same type.");
+            }
+
+            expr = new Expr.Binary(expr, operator, right, expr.valueType); 
         }
 
         return expr;
@@ -152,10 +262,22 @@ class Parser {
 
         if (match(QUESTION)) {
             Token operator = previous();
+            while (match(NL)); // skip empty lines
+            
+            if (expr.valueType.isNotTokenType(BOOL_TYPE)) {
+                throw error(operator, "requires bool condition.");
+            }
+
             Expr thenBranch = ternaryConditional();
-            consume(COLON, "Expect ':' after then branch of ternary conditional.");
+            consume(COLON, "Expect ':' after then branch");
+            while (match(NL)); // skip empty lines
             Expr elseBranch = ternaryConditional();
-            expr = new Expr.TernaryConditional(expr, operator, thenBranch, elseBranch);
+
+            if (valueTypeIsDifferent(thenBranch, elseBranch)) {
+                throw error(operator, "requires both branches to be of the same type.");
+            }
+
+            expr = new Expr.TernaryConditional(expr, operator, thenBranch, elseBranch, thenBranch.valueType); 
         }
 
         return expr;
@@ -175,7 +297,15 @@ class Parser {
         while (match(BANG_EQUAL, EQUAL_EQUAL)) {
             Token operator = previous();
             Expr right = comparison();
-            expr = new Expr.Binary(expr, operator, right);
+
+            if (valueTypeIsDifferent(expr, right)) {
+                throw error(operator, "requires both operands to be of the same type.");
+            }
+            if (expr.valueType.isNotTokenType(NUM_TYPE) && expr.valueType.isNotTokenType(BOOL_TYPE)) {
+                throw error(operator, "does not support " + expr.valueType.lexeme);
+            }
+
+            expr = new Expr.Binary(expr, operator, right, new Token(TokenType.BOOL_TYPE, "bool", null, operator.line));
         }
 
         return expr;
@@ -195,7 +325,15 @@ class Parser {
         while (match(GREATER, GREATER_EQUAL, LESS, LESS_EQUAL)) {
             Token operator = previous();
             Expr right = term();
-            expr = new Expr.Binary(expr, operator, right);
+
+            if (valueTypeIsDifferent(expr, right)) {
+                throw error(operator, "requires both operands to be of the same type.");
+            }
+            if (expr.valueType.isNotTokenType(NUM_TYPE) && expr.valueType.isNotTokenType(STR_TYPE)) {
+                throw error(operator, "does not support " + expr.valueType.lexeme);
+            }
+
+            expr = new Expr.Binary(expr, operator, right, new Token(TokenType.BOOL_TYPE, "bool", null, operator.line));
         }
 
         return expr;
@@ -215,7 +353,21 @@ class Parser {
         while (match(MINUS, PLUS)) {
             Token operator = previous();
             Expr right = factor();
-            expr = new Expr.Binary(expr, operator, right);
+
+            if (valueTypeIsDifferent(expr, right)) {
+                throw error(operator, "requires both operands to be of the same type.");
+            }
+            if (operator.isTokenType(PLUS))
+                if (expr.valueType.isNotTokenType(NUM_TYPE) && 
+                    expr.valueType.isNotTokenType(STR_TYPE) &&
+                    expr.valueType.isNotTokenType(LIST_TYPE)) {
+                    throw error(operator, "does not support " + expr.valueType.lexeme);
+                }
+            if (operator.isTokenType(MINUS) && expr.valueType.isNotTokenType(NUM_TYPE)) {
+                throw error(operator, "does not support " + expr.valueType.lexeme);
+            }
+            
+            expr = new Expr.Binary(expr, operator, right, expr.valueType);
         }
 
         return expr;
@@ -235,7 +387,23 @@ class Parser {
         while (match(SLASH, STAR)) {
             Token operator = previous();
             Expr right = unary();
-            expr = new Expr.Binary(expr, operator, right);
+
+            
+            if (right.valueType.isNotTokenType(NUM_TYPE)){
+                throw error(operator, "does not support " + expr.valueType.lexeme + ", " + right.valueType.lexeme);
+            }
+            if (operator.isTokenType(STAR))
+                if (expr.valueType.isNotTokenType(LIST_TYPE) && 
+                    expr.valueType.isNotTokenType(NUM_TYPE) &&
+                    expr.valueType.isNotTokenType(STR_TYPE)) {
+                    throw error(operator, "does not support " + expr.valueType.lexeme + ", " + right.valueType.lexeme);
+                }
+            if (operator.isTokenType(SLASH))
+                if (expr.valueType.isNotTokenType(NUM_TYPE)) {
+                    throw error(operator, "does not support " + expr.valueType.lexeme + ", " + right.valueType.lexeme);
+                }
+
+            expr = new Expr.Binary(expr, operator, right, expr.valueType);
         }
 
         return expr;
@@ -245,7 +413,15 @@ class Parser {
         if (match(BANG, MINUS)) {
             Token operator = previous();
             Expr right = unary();
-            return new Expr.Unary(operator, right);
+
+            if (operator.isTokenType(MINUS) && right.valueType.isNotTokenType(NUM_TYPE)) {
+                throw error(operator, "does not support " + right.valueType.lexeme);
+            }
+            if (operator.isTokenType(BANG) && right.valueType.isNotTokenType(BOOL_TYPE)) {
+                throw error(operator, "does not support " + right.valueType.lexeme);
+            }
+
+            return new Expr.Unary(operator, right, right.valueType);
         }
 
         return primary();
@@ -253,29 +429,51 @@ class Parser {
 
     private Expr primary() {
         if (match(FALSE)) {
-            return new Expr.Literal(false);
+            return new Expr.Literal(false, new Token(BOOL_TYPE, "bool", null, previous().line));
         }
 
         if (match(TRUE)) {
-            return new Expr.Literal(true);
+            return new Expr.Literal(true, new Token(BOOL_TYPE, "bool", null, previous().line));
         }
 
         if (match(NIL)) {
-            return new Expr.Literal(null);
+            return new Expr.Literal(null, new Token(NIL, "nil", null, previous().line));
         }
 
-        if (match(NUMBER, STRING)) {
-            return new Expr.Literal(previous().literal);
+        if (match(STR_LITERAL)) {
+            return new Expr.Literal(previous().literal, new Token(STR_TYPE, "str", null, previous().line));
+        }
+
+        if (match(NUM_LITERAL)) {
+            return new Expr.Literal(previous().literal, new Token(NUM_TYPE, "num", null, previous().line));
         }
 
         if (match(LEFT_PAREN)) {
             Expr expr = expression();
             consume(RIGHT_PAREN, "Expect ')' after expression.");
-            return new Expr.Grouping(expr);
+            return new Expr.Grouping(expr, expr.valueType);
+        }
+
+        if (match(LEFT_SQUARE)) {
+            List<Expr> elements = new ArrayList<>();
+            if (!check(RIGHT_SQUARE)) {
+                do {
+                    // comma expression is not allowed
+                    elements.add(ternaryConditional());
+                } while (match(COMMA));
+            }
+            consume(RIGHT_SQUARE, "Expect ']' after list.");
+            return new Expr.List_(elements, new Token(LIST_TYPE, "list", null, previous().line));
         }
 
         if (match(IDENTIFIER)) {
-            return new Expr.Variable(previous());
+            Token id_type = variableTable.getType(previous());
+            
+            if (id_type == null) {
+                throw error(previous(), "Undefined variable '" + previous().lexeme + "'.");
+            }
+
+            return new Expr.Variable(previous(), id_type);
         }
 
         throw error(peek(), "Expect expression.");
@@ -307,8 +505,8 @@ class Parser {
 
     private void synchronize() {
         while (!isAtEnd()) {
-            switch (peek().type) {
-                case EOS:
+            switch (peek().tokenType) {
+                case NL:
                     advance();
                     return;
                 case CLASS:
@@ -336,7 +534,7 @@ class Parser {
             return false;
         }
 
-        return peek().type == type;
+        return peek().isTokenType(type);
     }
 
     private Token advance() {
@@ -348,7 +546,7 @@ class Parser {
     }
 
     private boolean isAtEnd() {
-        return peek().type == EOF;
+        return peek().isTokenType(EOF);
     }
 
     private Token peek() {

@@ -1,8 +1,17 @@
 package lox;
 
-abstract class Expr {
+import java.util.List;
+
+public abstract class Expr {
+
+    final Token valueType;
+
+    Expr(Token valueType) {
+        this.valueType = valueType;
+    }
 
     interface Visitor<R> {
+        R visit(List_ expr);
         R visit(Binary expr);
         R visit(Grouping expr);
         R visit(Literal expr);
@@ -13,13 +22,29 @@ abstract class Expr {
 
     abstract <R> R accept(Visitor<R> visitor);
 
+    static class List_ extends Expr {
+
+        final List<Expr> items;
+
+        List_(List<Expr> items, Token valueType) {
+            super(valueType);
+            this.items = items;
+        }
+
+        @Override
+        <R> R accept(Visitor<R> visitor) {
+            return visitor.visit(this);
+        }
+    }
+
     static class Binary extends Expr {
 
         final Expr left;
         final Token operator;
         final Expr right;
 
-        Binary(Expr left, Token operator, Expr right) {
+        Binary(Expr left, Token operator, Expr right, Token valueType) {
+            super(valueType);
             this.left = left;
             this.operator = operator;
             this.right = right;
@@ -35,7 +60,8 @@ abstract class Expr {
 
         final Expr expression;
 
-        Grouping(Expr expression) {
+        Grouping(Expr expression, Token valueType) {
+            super(valueType);
             this.expression = expression;
         }
 
@@ -49,7 +75,8 @@ abstract class Expr {
 
         final Object value;
 
-        Literal(Object value) {
+        Literal(Object value, Token valueType) {
+            super(valueType);
             this.value = value;
         }
 
@@ -63,7 +90,8 @@ abstract class Expr {
 
         final Token name;
 
-        Variable(Token name) {
+        Variable(Token name, Token valueType) {
+            super(valueType);
             this.name = name;
         }
 
@@ -78,7 +106,8 @@ abstract class Expr {
         final Token operator;
         final Expr right;
 
-        Unary(Token operator, Expr right) {
+        Unary(Token operator, Expr right, Token valueType) {
+            super(valueType);
             this.operator = operator;
             this.right = right;
         }
@@ -96,7 +125,8 @@ abstract class Expr {
         final Expr thenBranch;
         final Expr elseBranch;
 
-        TernaryConditional(Expr condition, Token question, Expr thenBranch, Expr elseBranch) {
+        TernaryConditional(Expr condition, Token question, Expr thenBranch, Expr elseBranch, Token valueType) {
+            super(valueType);
             this.condition = condition;
             this.question = question;
             this.thenBranch = thenBranch;

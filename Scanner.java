@@ -31,11 +31,19 @@ class Scanner {
         keywords.put("this",   THIS);
         keywords.put("true",   TRUE);
         keywords.put("var",    VAR);
+        keywords.put("const",  CONST);
         keywords.put("while",  WHILE);
+        keywords.put("str",    STR_TYPE);
+        keywords.put("num",    NUM_TYPE);
+        keywords.put("bool",   BOOL_TYPE);
+        keywords.put("list",   LIST_TYPE);
     }
 
     Scanner(String source) {
         this.source = source;
+
+        // remove leading white spaces to avoid empty statements
+        discard_whitespaces();
     }
 
     List<Token> scanTokens() {
@@ -44,8 +52,10 @@ class Scanner {
             scanToken();
         }
 
-        // add an EOS, EOF token at the end
-        tokens.add(new Token(EOS, "", null, line));
+        // add an NL, EOF token at the end
+        if (tokens.get(tokens.size() - 1).isNotTokenType(NL))
+            tokens.add(new Token(NL, "", null, line));
+        
         tokens.add(new Token(EOF, "", null, line));
         return tokens;
     }
@@ -70,33 +80,14 @@ class Scanner {
         }
 
         switch (c) {
-            case '?': 
-                addToken(QUESTION); 
-                // new line is not EOS in this case
-                discard_whitespaces(); 
-                break;
-            case ':': 
-                addToken(COLON); 
-                // new line is not EOS in this case
-                discard_whitespaces(); 
-                break;
-            case '(': 
-                addToken(LEFT_PAREN); 
-                // new line is not EOS in this case
-                discard_whitespaces();
-                break;
+            case '?': addToken(QUESTION); break;
+            case ':': addToken(COLON); break;
+            case '(': addToken(LEFT_PAREN); break;
             case ')': addToken(RIGHT_PAREN); break;
-            case '{': 
-                addToken(LEFT_BRACE); 
-                // new line is not EOS in this case
-                discard_whitespaces();
-                break;
-            case '}': 
-                addToken(EOS);
-                addToken(RIGHT_BRACE);
-                // new line is not EOS in this case
-                discard_whitespaces();
-                break;
+            case '[': addToken(LEFT_SQUARE); break;
+            case ']': addToken(RIGHT_SQUARE); break;
+            case '{': addToken(LEFT_BRACE); break;
+            case '}': addToken(RIGHT_BRACE); break;
             case ',': addToken(COMMA); break;
             case '.': addToken(DOT); break;
             case '-': addToken(MINUS); break;
@@ -134,12 +125,11 @@ class Scanner {
             case '\r':
             case '\t':
                 break;
-            case '\n': // end of statements (EOS)
-                // skip duplicate new lines
-                discard_whitespaces();
-                if (peek() != ')')
-                    addToken(EOS);
+            case '\n': // also used as end of statement
+                // skip duplicate new lines, speed up a little
+                addToken(NL);
                 line++;
+                discard_whitespaces();
                 break;
             case '"': 
                 string(); 
@@ -182,7 +172,7 @@ class Scanner {
             while (isDigit(peek())) advance();
         }
 
-        addToken(NUMBER, Double.parseDouble(source.substring(start, current)));
+        addToken(NUM_LITERAL, Double.parseDouble(source.substring(start, current)));
     }
     
     private void string() {
@@ -198,7 +188,7 @@ class Scanner {
         
         // trim the surrounding quotes
         String value = source.substring(start + 1, current - 1);
-        addToken(STRING, value);
+        addToken(STR_LITERAL, value);
     }
 
     private boolean match(char expected) {
@@ -224,7 +214,7 @@ class Scanner {
     }
 
     private void discard_whitespaces(){ 
-        if (!isAtEnd() && Character.isWhitespace(peek())) {
+        while (!isAtEnd() && Character.isWhitespace(peek())) {
             char c = advance();
             if (c == '\n')
                 line++;

@@ -11,13 +11,14 @@ class GenerateAst {
         String outputDir = "lox";
 
         defineAst(outputDir, "Expr", Arrays.asList(
-            "Binary     : Expr left, Token operator, Expr right",
-            "Grouping   : Expr expression",
-            "Literal    : Object value",
-            "Variable   : Token name",
-            "Unary      : Token operator, Expr right",
-            "TernaryConditional : Expr condition, Token question, Expr thenBranch, Expr elseBranch"
-        ));
+            "List_      : List<Expr> elements, Token valueType",
+            "Binary     : Expr left, Token operator, Expr right, Token valueType",
+            "Grouping   : Expr expression, Token valueType",
+            "Literal    : Object value, Token valueType",
+            "Variable   : Token name, Token valueType",
+            "Unary      : Token operator, Expr right, Token valueType",
+            "TernaryConditional : Expr condition, Token question, Expr thenBranch, Expr elseBranch, Token valueType"
+            ));
         
         defineAst(outputDir, "Stmt", Arrays.asList(
             "If         : Expr condition, Stmt thenBranch, Stmt elseBranch",  
@@ -25,7 +26,7 @@ class GenerateAst {
             "Assign     : Token name, Expr value",
             "Expression : Expr expression",
             "Print      : Expr expression",
-            "VarDecl    : Token name, Expr initializer"
+            "VarDecl    : Token name, Expr initializer, boolean isConst"
         ));
 
     }
@@ -39,7 +40,18 @@ class GenerateAst {
         writer.println("import java.util.List;");
         writer.println();
         writer.println("public abstract class " + baseName + " {");
-        
+        writer.println();
+        if (baseName.equals("Expr"))
+            writer.println("    final Token valueType;");
+        writer.println();
+
+        // add the constructor
+        if (baseName.equals("Expr")) {
+            writer.println("    " + baseName + "(Token valueType) {");
+            writer.println("        this.valueType = valueType;");
+            writer.println("    }");
+        }
+
         defineVisitor(writer, baseName, types);
         
         // The base accept() method
@@ -50,14 +62,14 @@ class GenerateAst {
         for (String type : types) {
             String className = type.split(":")[0].trim();
             String fields = type.split(":")[1].trim();
-            defineType(writer, baseName, className, fields);
+            defineSubClass(writer, baseName, className, fields);
         }
 
         writer.println("}");
         writer.close();
     }
 
-    private static void defineType(PrintWriter writer, String baseName, String className, String fieldList) {
+    private static void defineSubClass(PrintWriter writer, String baseName, String className, String fieldList) {
         writer.println();
         writer.println("    static class " + className + " extends " + baseName + " {");
         writer.println();
@@ -65,14 +77,20 @@ class GenerateAst {
         // Fields
         String[] fields = fieldList.split(", ");
         for (String field : fields) {
+            if (field.equals("Token valueType")) continue;
             writer.println("        final " + field + ";");
         }
         writer.println();
 
         // Constructor
         writer.println("        " + className + "(" + fieldList + ") {");
+        if (baseName.equals("Expr")) {
+            writer.println("            super(valueType);");
+        }
+
         // Store parameters in fields
         for (String field : fields) {
+            if (field.equals("Token valueType")) continue;
             String name = field.split(" ")[1];
             writer.println("            this." + name + " = " + name + ";");
         }

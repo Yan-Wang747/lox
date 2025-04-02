@@ -1,8 +1,57 @@
 package lox;
 
+import java.util.HashMap;
+import java.util.Map;
 import java.util.List;
+import java.util.ArrayList;
 
 class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
+    
+    private class Environment {
+        private final Environment enclosing;
+        private final Map<String, Object> values = new HashMap<>();
+
+        Environment() {
+            this.enclosing = null;
+        }
+
+        Environment(Environment enclosing) {
+            this.enclosing = enclosing;
+        }
+
+        void define(Token name, Object value) {
+            if (values.containsKey(name.lexeme)) {
+                throw new RuntimeError(name, "Variable '" + name.lexeme + "' already defined in this scope.");
+            }
+            values.put(name.lexeme, value);
+        }
+
+        Object get(Token name) {
+            if (values.containsKey(name.lexeme)) {
+                return values.get(name.lexeme);
+            }
+
+            if (enclosing != null) 
+                return enclosing.get(name);
+
+            throw new RuntimeError(name, "Undefined variable '" + name.lexeme + "'.");
+        }
+
+        void assign(Token name, Object value) {
+            if (values.containsKey(name.lexeme)) {
+                values.put(name.lexeme, value);
+                return;
+            }
+
+            if (enclosing != null) {
+                enclosing.assign(name, value);
+                return;
+            }
+            
+            throw new RuntimeError(name, "Undefined variable '" + name.lexeme + "'.");
+        }
+    }
+
     private Environment environment = new Environment();
 
     void interpret(List<Stmt> statements) {
@@ -53,20 +102,20 @@ class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
 
     @Override
     public Void visit(Stmt.Block stmt) {
-        executeBlock(stmt, new Environment(environment));
+        executeBlock(stmt, new Environment(this.environment));
         return null;
     }
 
-    private void executeBlock(Stmt.Block block, Environment environment) {
-        Environment previous = this.environment;
+    private void executeBlock(Stmt.Block block, Environment newEnvironment) {
+        Environment enclosing = this.environment;
         try {
-            this.environment = environment;
+            this.environment = newEnvironment;
 
             for (Stmt statement : block.statements) {
                 execute(statement);
             }
         } finally {
-            this.environment = previous;
+            this.environment = enclosing;
         }
     }
 
@@ -99,6 +148,15 @@ class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
     }
 
     @Override
+    public Object visit(Expr.List_ expr) {
+        List<Object> values = new ArrayList<>();
+        for (Expr item : expr.items) {
+            values.add(evaluate(item));
+        }
+        return values;
+    }
+
+    @Override
     public Object visit(Expr.Literal expr) {
         return expr.value;
     }
@@ -112,7 +170,7 @@ class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
     public Object visit(Expr.Unary expr) {
         Object right = evaluate(expr.right);
 
-        switch (expr.operator.type) {
+        switch (expr.operator.tokenType) {
             case MINUS:
                 checkNumberOperand(expr.operator, right);
                 return -(double) right;
@@ -134,7 +192,7 @@ class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
         Object left = evaluate(expr.left);
         Object right = evaluate(expr.right);
 
-        switch (expr.operator.type) {
+        switch (expr.operator.tokenType) {
             case MINUS:
                 checkNumberOperands(expr.operator, left, right);
                 return (double)left - (double)right;
