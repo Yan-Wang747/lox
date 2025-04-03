@@ -20,9 +20,6 @@ class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
         }
 
         void define(Token name, Object value) {
-            if (values.containsKey(name.lexeme)) {
-                throw new RuntimeError(name, "Variable '" + name.lexeme + "' already defined in this scope.");
-            }
             values.put(name.lexeme, value);
         }
 

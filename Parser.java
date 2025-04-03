@@ -15,7 +15,7 @@ class Parser {
 
         private final VariableTable enclosing;
         private final Map<String, Token> name_type = new HashMap<>();
-        private final Set<String> constants = new HashSet<>();
+        private final Set<String> mutables = new HashSet<>();
 
         VariableTable() {
             this.enclosing = null;
@@ -25,15 +25,15 @@ class Parser {
             this.enclosing = enclosing;
         }
 
-        Token add(String name, Token type, boolean isConst) {
-            if (isConst)
-                constants.add(name);
+        Token add(String name, Token type, boolean isMutable) {
+            if (isMutable)
+                mutables.add(name);
 
             return name_type.put(name, type);
         }
 
-        boolean isConstant(String name) {
-            return constants.contains(name);
+        boolean isMutable(String name) {
+            return mutables.contains(name);
         }
 
         Token getType(String name) {
@@ -81,13 +81,15 @@ class Parser {
         if (match(VAR))
             return varDeclaration(false);
 
-        if (match(CONST))
+        if (match(MUT)) {
+            consume(VAR, "Expect 'var' after 'mut'.");
             return varDeclaration(true);
-
+        }
+            
         return statement();
     }
 
-    private Stmt varDeclaration(boolean isConst) {
+    private Stmt varDeclaration(boolean isMutable) {
         Token name = consume(IDENTIFIER, "Expect variable/constant name.");
         Token varType = null;
         if (match(COLON)) {
@@ -117,12 +119,9 @@ class Parser {
         }
         
         consume(NL, "Expect a new line after variable/constant declaration.");
-        Token previous_type = variableTable.add(name.lexeme, varType, isConst);
-        if (previous_type != null) {
-            throw error(name, "Variable '" + name.lexeme + "' already defined in this scope.");
-        }
+        variableTable.add(name.lexeme, varType, isMutable); // allow redeclaration of variables
 
-        return new Stmt.VarDecl(name, initializer, isConst);
+        return new Stmt.VarDecl(name, initializer, isMutable);
     }
     
     private Stmt statement() {
@@ -209,8 +208,8 @@ class Parser {
         if (expr instanceof Expr.Variable) {
             Expr.Variable varExpr = (Expr.Variable)expr;
 
-            if (variableTable.isConstant(varExpr.name.lexeme)) {
-                throw error(varExpr.name, "Cannot assign to constant.");
+            if (!variableTable.isMutable(varExpr.name.lexeme)) {
+                throw error(varExpr.name, "Cannot assign to immutable variables.");
             }
 
             return varExpr.name;
@@ -516,6 +515,7 @@ class Parser {
                     return;
                 case CLASS:
                 case FUN:
+                case MUT:
                 case VAR:
                 case FOR:
                 case IF:

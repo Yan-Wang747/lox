@@ -30,8 +30,8 @@ class Scanner {
         keywords.put("super",  SUPER);
         keywords.put("this",   THIS);
         keywords.put("true",   TRUE);
+        keywords.put("mut",    MUT);
         keywords.put("var",    VAR);
-        keywords.put("const",  CONST);
         keywords.put("while",  WHILE);
         keywords.put("str",    STR_TYPE);
         keywords.put("num",    NUM_TYPE);
