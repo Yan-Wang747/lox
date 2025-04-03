@@ -154,13 +154,18 @@ class Parser {
 
     private Stmt ifStatement() {
         Expr condition = expression();
-        consume(COLON, "Expect ':' after condition.");
+        if (condition.valueType.isNotTokenType(BOOL_TYPE)) {
+            throw error(condition.valueType, "requires bool condition.");
+        }
+        
+        match(NL); // skip empty lines
+        consume(LEFT_BRACE, "Expect '{' after 'if'.");
 
-        Stmt thenBranch = statement();
+        Stmt thenBranch = new Stmt.Block(block(new VariableTable(this.variableTable)));
         Stmt elseBranch = null;
         if (match(ELSE)) {
-            consume(COLON, "Expect ':' after else.");
-            elseBranch = statement();
+            consume(LEFT_BRACE, "Expect '{' after 'else'.");
+            elseBranch = new Stmt.Block(block(new VariableTable(this.variableTable)));
         }
 
         return new Stmt.If(condition, thenBranch, elseBranch);
