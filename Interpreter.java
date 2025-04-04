@@ -245,9 +245,9 @@ class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
 
     @Override
     public Object visit(Expr.Variable expr) {
-        if (expr.index != null) // handle list item access
+        if (expr.indexExpr != null) // handle list item access
         {
-            int index = (int)(double) evaluate(expr.index);
+            int index = (int)(double) evaluate(expr.indexExpr);
             return environment.get(expr.name, index);
         }
         return environment.get(expr.name);

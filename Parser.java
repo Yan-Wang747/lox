@@ -199,20 +199,24 @@ class Parser {
         return new Stmt.Print(value);
     }
     
-    private Stmt assignmentStatement(Expr expr) {
-        Token name = get_left_value(expr);
+    private Stmt assignmentStatement(Expr targetExpr) {
+        Token name = get_left_value(targetExpr);
         Expr r_value = expression();
         
         // handle list item assignment
-        if (expr instanceof Expr.Variable) { 
-            Expr.Variable varExpr = (Expr.Variable)expr;
-            if (varExpr.index != null) { 
+        if (targetExpr instanceof Expr.Variable) { 
+            Expr.Variable targetVarExpr = (Expr.Variable)targetExpr;
+            if (targetVarExpr.valueType.isTokenType(LIST_TYPE)) { 
+                if (!targetVarExpr.valueType.lexeme.equals("[" + r_value.valueType.lexeme + "]")) {
+                    throw error(name, "List type '" + targetVarExpr.valueType.lexeme + "' does not match r_value type '" + r_value.valueType.lexeme + "'.");
+                }
+
                 consume(NL, "Expect a new line after assignment.");
-                return new Stmt.Assign(name, varExpr.index, r_value);
+                return new Stmt.Assign(name, targetVarExpr.indexExpr, r_value);
             }
         }
 
-        if (valueTypeIsDifferent(expr, r_value) && r_value.valueType.isNotTokenType(NIL)) {
+        if (valueTypeIsDifferent(targetExpr, r_value) && r_value.valueType.isNotTokenType(NIL)) {
             throw error(name, "requires both operands to be of the same type.");
         }
 
@@ -475,15 +479,27 @@ class Parser {
         }
 
         if (match(LEFT_SQUARE)) {
-            List<Expr> items = new ArrayList<>();
-            if (!check(RIGHT_SQUARE)) {
-                do {
-                    // comma expression is not allowed
-                    items.add(ternaryConditional());
-                } while (match(COMMA));
+            List<Expr> itemExprs = new ArrayList<>();
+            Expr itemExpr = ternaryConditional(); // must be at least one item
+            Token itemValueType = itemExpr.valueType;
+            itemExprs.add(itemExpr);
+            String listTypeLexeme = "[" + itemValueType.lexeme + "]";
+            
+            while (match(COMMA)) {
+                // comma expression is not allowed
+                itemExpr = ternaryConditional();
+                if (itemExpr.valueType.isNotTokenType(itemValueType.tokenType))
+                    throw error(previous(), "List type '" + listTypeLexeme + "' does not match item type '" + itemExpr.valueType.lexeme + "'.");
+                
+                itemExprs.add(itemExpr);
             }
+
             consume(RIGHT_SQUARE, "Expect ']' after list.");
-            return new Expr.List_(items, new Token(LIST_TYPE, "list", null, previous().line));
+
+            return new Expr.List_(
+                itemExprs, 
+                new Token(LIST_TYPE, listTypeLexeme, null, previous().line)
+            );
         }
 
         if (match(IDENTIFIER)) {
@@ -493,17 +509,17 @@ class Parser {
                 throw error(previous(), "Undefined variable '" + previous().lexeme + "'.");
             }
 
-            Expr index = null;
+            Expr indexExpr = null;
             if (id_type.isTokenType(LIST_TYPE)) {
                 consume(LEFT_SQUARE, "Expect '[' after list variable.");
-                index = expression();
-                if (index.valueType.isNotTokenType(NUM_TYPE)) {
+                indexExpr = expression();
+                if (indexExpr.valueType.isNotTokenType(NUM_TYPE)) {
                     throw error(id, "List only supports integer index.");
                 }
                 consume(RIGHT_SQUARE, "Expect ']' after list variable.");
             }
 
-            return new Expr.Variable(id, index, id_type);
+            return new Expr.Variable(id, indexExpr, id_type);
         }
 
         throw error(peek(), "Expect expression.");
