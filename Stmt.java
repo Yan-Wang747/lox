@@ -52,10 +52,12 @@ public abstract class Stmt {
     static class Assign extends Stmt {
 
         final Token name;
+        final Expr index;
         final Expr value;
 
-        Assign(Token name, Expr value) {
+        Assign(Token name, Expr index, Expr value) {
             this.name = name;
+            this.index = index;
             this.value = value;
         }
 
@@ -97,12 +99,12 @@ public abstract class Stmt {
 
         final Token name;
         final Expr initializer;
-        final boolean isConst;
+        final boolean isMutable;
 
-        VarDecl(Token name, Expr initializer, boolean isConst) {
+        VarDecl(Token name, Expr initializer, boolean isMutable) {
             this.name = name;
             this.initializer = initializer;
-            this.isConst = isConst;
+            this.isMutable = isMutable;
         }
 
         @Override

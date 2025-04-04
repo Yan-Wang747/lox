@@ -163,8 +163,15 @@ class Parser {
         Stmt thenBranch = new Stmt.Block(block(new VariableTable(this.variableTable)));
         Stmt elseBranch = null;
         if (match(ELSE)) {
-            consume(LEFT_BRACE, "Expect '{' after 'else'.");
-            elseBranch = new Stmt.Block(block(new VariableTable(this.variableTable)));
+            match(NL); // skip empty lines
+
+            if (match(IF)) {
+                elseBranch = ifStatement();
+            }
+            else {
+                consume(LEFT_BRACE, "Expect '{' after 'else'.");
+                elseBranch = new Stmt.Block(block(new VariableTable(this.variableTable)));
+            }
         }
 
         return new Stmt.If(condition, thenBranch, elseBranch);
@@ -195,13 +202,22 @@ class Parser {
     private Stmt assignmentStatement(Expr expr) {
         Token name = get_left_value(expr);
         Expr r_value = expression();
+        
+        // handle list item assignment
+        if (expr instanceof Expr.Variable) { 
+            Expr.Variable varExpr = (Expr.Variable)expr;
+            if (varExpr.index != null) { 
+                consume(NL, "Expect a new line after assignment.");
+                return new Stmt.Assign(name, varExpr.index, r_value);
+            }
+        }
 
         if (valueTypeIsDifferent(expr, r_value) && r_value.valueType.isNotTokenType(NIL)) {
             throw error(name, "requires both operands to be of the same type.");
         }
 
         consume(NL, "Expect a new line after assignment.");
-        return new Stmt.Assign(name, r_value);
+        return new Stmt.Assign(name, null, r_value);
     }
 
     private Token get_left_value(Expr expr) {
@@ -471,13 +487,23 @@ class Parser {
         }
 
         if (match(IDENTIFIER)) {
-            Token id_type = variableTable.getType(previous().lexeme);
-            
+            Token id = previous();
+            Token id_type = variableTable.getType(id.lexeme);
             if (id_type == null) {
                 throw error(previous(), "Undefined variable '" + previous().lexeme + "'.");
             }
 
-            return new Expr.Variable(previous(), id_type);
+            Expr index = null;
+            if (id_type.isTokenType(LIST_TYPE)) {
+                consume(LEFT_SQUARE, "Expect '[' after list variable.");
+                index = expression();
+                if (index.valueType.isNotTokenType(NUM_TYPE)) {
+                    throw error(id, "List only supports integer index.");
+                }
+                consume(RIGHT_SQUARE, "Expect ']' after list variable.");
+            }
+
+            return new Expr.Variable(id, index, id_type);
         }
 
         throw error(peek(), "Expect expression.");

@@ -34,6 +34,26 @@ class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
             throw new RuntimeError(name, "Undefined variable '" + name.lexeme + "'.");
         }
 
+        Object get(Token name, int index) {
+            if (values.containsKey(name.lexeme)) {
+                List<Object> list = (List<Object>) values.get(name.lexeme);
+
+                // normalize negative index
+                if (index < 0)
+                    index = list.size() + index;
+            
+                if (index < 0 || index >= list.size())
+                    throw new RuntimeError(name, "Index out of bounds: " + index);
+            
+                return list.get(index);
+            }
+
+            if (enclosing != null) 
+                return enclosing.get(name, index);
+
+            throw new RuntimeError(name, "Undefined variable '" + name.lexeme + "'.");
+        }
+        
         void assign(Token name, Object value) {
             if (values.containsKey(name.lexeme)) {
                 values.put(name.lexeme, value);
@@ -42,6 +62,30 @@ class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
 
             if (enclosing != null) {
                 enclosing.assign(name, value);
+                return;
+            }
+            
+            throw new RuntimeError(name, "Undefined variable '" + name.lexeme + "'.");
+        }
+    
+        void assign(Token name, int index, Object value) // used for list item assignment
+        {
+            if (values.containsKey(name.lexeme)) {
+                List<Object> list = (List<Object>) values.get(name.lexeme);
+
+                // normalize negative index
+                if (index < 0)
+                    index = list.size() + index;
+                
+                if (index < 0 || index >= list.size())
+                    throw new RuntimeError(name, "Index out of bounds: " + index);
+
+                list.set(index, value);
+                return;
+            }
+
+            if (enclosing != null) {
+                enclosing.assign(name, index, value);
                 return;
             }
             
@@ -132,7 +176,14 @@ class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
     @Override
     public Void visit(Stmt.Assign stmt) {
         Object value = evaluate(stmt.value);
-        environment.assign(stmt.name, value);
+        if (stmt.index != null) // handle list item assignment
+        {
+            int index = (int)(double) evaluate(stmt.index);
+            environment.assign(stmt.name, index, value);
+        }
+        else
+            environment.assign(stmt.name, value);
+        
         return null;
     }
     
@@ -194,6 +245,11 @@ class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
 
     @Override
     public Object visit(Expr.Variable expr) {
+        if (expr.index != null) // handle list item access
+        {
+            int index = (int)(double) evaluate(expr.index);
+            return environment.get(expr.name, index);
+        }
         return environment.get(expr.name);
     }
 

@@ -11,11 +11,11 @@ class GenerateAst {
         String outputDir = "lox";
 
         defineAst(outputDir, "Expr", Arrays.asList(
-            "List_      : List<Expr> elements, Token valueType",
+            "List_      : List<Expr> items, Token valueType",
             "Binary     : Expr left, Token operator, Expr right, Token valueType",
             "Grouping   : Expr expression, Token valueType",
             "Literal    : Object value, Token valueType",
-            "Variable   : Token name, Token valueType",
+            "Variable   : Token name, Expr index, Token valueType",
             "Unary      : Token operator, Expr right, Token valueType",
             "TernaryConditional : Expr condition, Token question, Expr thenBranch, Expr elseBranch, Token valueType"
             ));
@@ -23,10 +23,10 @@ class GenerateAst {
         defineAst(outputDir, "Stmt", Arrays.asList(
             "If         : Expr condition, Stmt thenBranch, Stmt elseBranch",  
             "Block      : List<Stmt> statements",
-            "Assign     : Token name, Expr value",
+            "Assign     : Token name, Expr index, Expr value",
             "Expression : Expr expression",
             "Print      : Expr expression",
-            "VarDecl    : Token name, Expr initializer, boolean isConst"
+            "VarDecl    : Token name, Expr initializer, boolean isMutable"
         ));
 
     }
