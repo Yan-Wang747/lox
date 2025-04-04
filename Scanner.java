@@ -172,7 +172,7 @@ class Scanner {
             while (isDigit(peek())) advance();
         }
 
-        addToken(NUM_LITERAL, Double.parseDouble(source.substring(start, current)));
+        addToken(NUM, Double.parseDouble(source.substring(start, current)));
     }
     
     private void string() {
@@ -188,7 +188,7 @@ class Scanner {
         
         // trim the surrounding quotes
         String value = source.substring(start + 1, current - 1);
-        addToken(STR_LITERAL, value);
+        addToken(STR, value);
     }
 
     private boolean match(char expected) {

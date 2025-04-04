@@ -464,11 +464,11 @@ class Parser {
             return new Expr.Literal(null, new Token(NIL, "nil", null, previous().line));
         }
 
-        if (match(STR_LITERAL)) {
+        if (match(STR)) {
             return new Expr.Literal(previous().literal, new Token(STR_TYPE, "str", null, previous().line));
         }
 
-        if (match(NUM_LITERAL)) {
+        if (match(NUM)) {
             return new Expr.Literal(previous().literal, new Token(NUM_TYPE, "num", null, previous().line));
         }
 
