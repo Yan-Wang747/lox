@@ -15,6 +15,7 @@ public abstract class Expr {
         R visit(Binary expr);
         R visit(Grouping expr);
         R visit(Literal expr);
+        R visit(Logical expr);
         R visit(Variable expr);
         R visit(Unary expr);
         R visit(TernaryConditional expr);
@@ -78,6 +79,25 @@ public abstract class Expr {
         Literal(Object value, Token valueType) {
             super(valueType);
             this.value = value;
+        }
+
+        @Override
+        <R> R accept(Visitor<R> visitor) {
+            return visitor.visit(this);
+        }
+    }
+
+    static class Logical extends Expr {
+
+        final Expr left;
+        final Token operator;
+        final Expr right;
+
+        Logical(Expr left, Token operator, Expr right, Token valueType) {
+            super(valueType);
+            this.left = left;
+            this.operator = operator;
+            this.right = right;
         }
 
         @Override

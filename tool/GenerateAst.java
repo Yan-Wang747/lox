@@ -15,6 +15,7 @@ class GenerateAst {
             "Binary     : Expr left, Token operator, Expr right, Token valueType",
             "Grouping   : Expr expression, Token valueType",
             "Literal    : Object value, Token valueType",
+            "Logical    : Expr left, Token operator, Expr right, Token valueType",
             "Variable   : Token name, Expr indexExpr, Token valueType",
             "Unary      : Token operator, Expr right, Token valueType",
             "TernaryConditional : Expr condition, Token question, Expr thenBranch, Expr elseBranch, Token valueType"
@@ -26,6 +27,7 @@ class GenerateAst {
             "Assign     : Token name, Expr index, Expr value",
             "Expression : Expr expression",
             "Print      : Expr expression",
+            "While      : Expr condition, Stmt body",
             "VarDecl    : Token name, Expr initializer, boolean isMutable"
         ));
 

@@ -140,6 +140,10 @@ class Parser {
             return printStatement();
         }
 
+        if (match(WHILE)) {
+            return whileStatement();
+        }
+
         // try assignment statement
         Expr expr = expression();
         if (match(EQUAL)) {
@@ -197,6 +201,20 @@ class Parser {
         Expr value = expression();
         consume(NL, "Expect a new line after the print statement.");
         return new Stmt.Print(value);
+    }
+    
+    private Stmt whileStatement() {
+        Expr condition = expression();
+        if (condition.valueType.isNotTokenType(BOOL_TYPE)) {
+            throw error(condition.valueType, "requires bool condition.");
+        }
+        
+        match(NL); // skip empty lines
+        consume(LEFT_BRACE, "Expect '{' after 'while'.");
+
+        Stmt body = new Stmt.Block(block(new VariableTable(this.variableTable)));
+
+        return new Stmt.While(condition, body);
     }
     
     private Stmt assignmentStatement(Expr targetExpr) {
@@ -282,7 +300,7 @@ class Parser {
     }
 
     private Expr ternaryConditional() {
-        Expr expr = equality();
+        Expr expr = or();
 
         if (match(QUESTION)) {
             Token operator = previous();
@@ -302,6 +320,40 @@ class Parser {
             }
 
             expr = new Expr.TernaryConditional(expr, operator, thenBranch, elseBranch, thenBranch.valueType); 
+        }
+
+        return expr;
+    }
+
+    private Expr or() {
+        Expr expr = and();
+
+        while (match(OR)) {
+            Token operator = previous();
+            Expr right = and();
+            
+            if (expr.valueType.isNotTokenType(BOOL_TYPE) || right.valueType.isNotTokenType(BOOL_TYPE)) {
+                throw error(operator, "requires both operands to be of the bool type.");
+            }
+
+            expr = new Expr.Logical(expr, operator, right, new Token(TokenType.BOOL_TYPE, "bool", null, operator.line));
+        }
+
+        return expr;
+    }
+
+    private Expr and() {
+        Expr expr = equality();
+
+        while (match(AND)) {
+            Token operator = previous();
+            Expr right = equality();
+
+            if (expr.valueType.isNotTokenType(BOOL_TYPE) || right.valueType.isNotTokenType(BOOL_TYPE)) {
+                throw error(operator, "requires both operands to be of the bool type.");
+            }
+
+            expr = new Expr.Logical(expr, operator, right, new Token(TokenType.BOOL_TYPE, "bool", null, operator.line));
         }
 
         return expr;

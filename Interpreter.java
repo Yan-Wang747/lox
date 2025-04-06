@@ -203,6 +203,14 @@ class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
     }
     
     @Override
+    public Void visit(Stmt.While stmt) {
+        while ((boolean)evaluate(stmt.condition)) {
+            execute(stmt.body);
+        }
+        return null;
+    }
+    
+    @Override
     public Void visit(Stmt.Expression stmt) {
         evaluate(stmt.expression);
         return null;
@@ -220,6 +228,19 @@ class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
     @Override
     public Object visit(Expr.Literal expr) {
         return expr.value;
+    }
+
+    @Override
+    public Object visit(Expr.Logical expr) {
+        boolean left = (boolean) evaluate(expr.left);
+
+        if (expr.operator.isTokenType(TokenType.OR)) {
+            if (left) return left;
+        } else {
+            if (!left) return left;
+        }
+
+        return evaluate(expr.right);
     }
 
     @Override
