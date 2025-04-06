@@ -16,5 +16,5 @@ enum TokenType {
 
     STR_TYPE, NUM_TYPE, BOOL_TYPE, LIST_TYPE, // type keywords
 
-    NL, EOF
+    EOS, EOF
 }

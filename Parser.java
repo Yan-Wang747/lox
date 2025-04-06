@@ -33,7 +33,13 @@ class Parser {
         }
 
         boolean isMutable(String name) {
-            return mutables.contains(name);
+            if (mutables.contains(name))
+                return true;
+            
+            if (enclosing != null)
+                return enclosing.isMutable(name);
+            
+            return false;
         }
 
         Token getType(String name) {
@@ -63,7 +69,7 @@ class Parser {
         List<Stmt> statements = new ArrayList<>();
         while (!isAtEnd() && !check(RIGHT_BRACE)) {
             // skip empty lines
-            if (match(NL)) 
+            if (match(EOS)) 
                 continue;
 
             try {
@@ -82,7 +88,6 @@ class Parser {
             return varDeclaration(false);
 
         if (match(MUT)) {
-            consume(VAR, "Expect 'var' after 'mut'.");
             return varDeclaration(true);
         }
             
@@ -90,6 +95,9 @@ class Parser {
     }
 
     private Stmt varDeclaration(boolean isMutable) {
+        if (isMutable)
+            consume(VAR, "Expect 'var' after 'mut'.");
+
         Token name = consume(IDENTIFIER, "Expect variable/constant name.");
         Token varType = null;
         if (match(COLON)) {
@@ -118,15 +126,13 @@ class Parser {
             }
         }
         
-        consume(NL, "Expect a new line after variable/constant declaration.");
+        consume(EOS, "Expect 'EOS' after variable/constant declaration.");
         variableTable.add(name.lexeme, varType, isMutable); // allow redeclaration of variables
 
         return new Stmt.VarDecl(name, initializer, isMutable);
     }
     
     private Stmt statement() {
-        if (match(NL))
-            return null;
 
         if (match(IF)) {
             return ifStatement();
@@ -142,6 +148,10 @@ class Parser {
 
         if (match(WHILE)) {
             return whileStatement();
+        }
+
+        if (match(FOR)) {
+            return forStatement();
         }
 
         // try assignment statement
@@ -161,13 +171,13 @@ class Parser {
             throw error(condition.valueType, "requires bool condition.");
         }
         
-        match(NL); // skip empty lines
+        match(EOS); // skip empty lines
         consume(LEFT_BRACE, "Expect '{' after 'if'.");
 
         Stmt thenBranch = new Stmt.Block(block(new VariableTable(this.variableTable)));
         Stmt elseBranch = null;
         if (match(ELSE)) {
-            match(NL); // skip empty lines
+            match(EOS); // skip empty lines
 
             if (match(IF)) {
                 elseBranch = ifStatement();
@@ -185,11 +195,11 @@ class Parser {
         VariableTable enclosing = this.variableTable;
         this.variableTable = newVariableTable;
         try {
-            consume(NL, "Expect a new line after '{'.");
+            consume(EOS, "Expect 'EOS' after '{'.");
 
             List<Stmt> statements = parse();
             consume(RIGHT_BRACE, "Expect '}' after block.");
-            consume(NL, "Expect a new line after '}'.");
+            consume(EOS, "Expect 'EOS' after '}'.");
             return statements;
         }
         finally {
@@ -199,7 +209,7 @@ class Parser {
     
     private Stmt printStatement() {
         Expr value = expression();
-        consume(NL, "Expect a new line after the print statement.");
+        consume(EOS, "Expect 'EOS' after the print statement.");
         return new Stmt.Print(value);
     }
     
@@ -209,12 +219,80 @@ class Parser {
             throw error(condition.valueType, "requires bool condition.");
         }
         
-        match(NL); // skip empty lines
+        match(EOS); // skip empty lines
         consume(LEFT_BRACE, "Expect '{' after 'while'.");
 
         Stmt body = new Stmt.Block(block(new VariableTable(this.variableTable)));
 
         return new Stmt.While(condition, body);
+    }
+    
+    private Stmt forStatement() {
+        // for statement has its own scope
+        VariableTable enclosing = this.variableTable;
+        VariableTable newVariableTable = new VariableTable(enclosing);
+        this.variableTable = newVariableTable;
+
+        try {
+            Stmt initializer = null;
+            if (match(EOS)) {
+                initializer = null;
+            }
+            else if (match(MUT)) {
+                initializer = varDeclaration(true);
+            }
+            else if (match(VAR)) {
+                throw error(previous(), "variable in initializer must be mutable.");
+            }
+            else {
+                Expr targetExpr = expression();
+                initializer = assignmentStatement(targetExpr);
+            }
+
+            Expr condition = null;
+            if (!check(EOS)) {
+                condition = expression();
+                if (condition.valueType.isNotTokenType(BOOL_TYPE)) {
+                    throw error(condition.valueType, "requires bool condition.");
+                }
+            }
+            consume(EOS, "Expect ';' after loop condition.");
+
+            Stmt increment = null;
+            if (!check(EOS)) {
+                increment = statement();
+            }
+            consume(LEFT_BRACE, "Expect '{' after increment.");
+        
+            Stmt body = new Stmt.Block(block(new VariableTable(this.variableTable)));
+
+            if (increment != null) {
+                body = new Stmt.Block(
+                    List.of(
+                        body, 
+                        increment
+                    )
+                );
+            }
+
+            if (condition == null) 
+                condition = new Expr.Literal(true, new Token(BOOL_TYPE, "bool", null, previous().line));
+            body = new Stmt.While(condition, body);
+
+            if (initializer != null) {
+                body = new Stmt.Block(
+                    List.of(
+                        initializer, 
+                        body
+                    )
+                );
+            }
+
+            return body;
+        }
+        finally {
+            this.variableTable = enclosing;
+        }
     }
     
     private Stmt assignmentStatement(Expr targetExpr) {
@@ -229,7 +307,7 @@ class Parser {
                     throw error(name, "List type '" + targetVarExpr.valueType.lexeme + "' does not match r_value type '" + r_value.valueType.lexeme + "'.");
                 }
 
-                consume(NL, "Expect a new line after assignment.");
+                consume(EOS, "Expect 'EOS' after assignment.");
                 return new Stmt.Assign(name, targetVarExpr.indexExpr, r_value);
             }
         }
@@ -238,7 +316,7 @@ class Parser {
             throw error(name, "requires both operands to be of the same type.");
         }
 
-        consume(NL, "Expect a new line after assignment.");
+        consume(EOS, "Expect 'EOS' after assignment.");
         return new Stmt.Assign(name, null, r_value);
     }
 
@@ -261,7 +339,7 @@ class Parser {
     }
 
     private Stmt expressionStatement(Expr expr) {
-        consume(NL, "Expect a new line after expression.");
+        consume(EOS, "Expect 'EOS' after expression.");
         return new Stmt.Expression(expr);
     }
 
@@ -286,7 +364,7 @@ class Parser {
 
         while (match(COMMA)) {
             Token operator = previous();
-            while (match(NL)); // skip empty lines
+            while (match(EOS)); // skip empty lines
             Expr right = ternaryConditional();
 
             if (valueTypeIsDifferent(expr, right)) {
@@ -304,7 +382,7 @@ class Parser {
 
         if (match(QUESTION)) {
             Token operator = previous();
-            while (match(NL)); // skip empty lines
+            while (match(EOS)); // skip empty lines
             
             if (expr.valueType.isNotTokenType(BOOL_TYPE)) {
                 throw error(operator, "requires bool condition.");
@@ -312,7 +390,7 @@ class Parser {
 
             Expr thenBranch = ternaryConditional();
             consume(COLON, "Expect ':' after then branch");
-            while (match(NL)); // skip empty lines
+            while (match(EOS)); // skip empty lines
             Expr elseBranch = ternaryConditional();
 
             if (valueTypeIsDifferent(thenBranch, elseBranch)) {
@@ -604,7 +682,7 @@ class Parser {
     private void synchronize() {
         while (!isAtEnd()) {
             switch (peek().tokenType) {
-                case NL:
+                case EOS:
                     advance();
                     return;
                 case CLASS:

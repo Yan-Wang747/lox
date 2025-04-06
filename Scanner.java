@@ -53,8 +53,8 @@ class Scanner {
         }
 
         // add an NL, EOF token at the end
-        if (tokens.get(tokens.size() - 1).isNotTokenType(NL))
-            tokens.add(new Token(NL, "", null, line));
+        if (tokens.get(tokens.size() - 1).isNotTokenType(EOS))
+            tokens.add(new Token(EOS, "", null, line));
         
         tokens.add(new Token(EOF, "", null, line));
         return tokens;
@@ -82,6 +82,10 @@ class Scanner {
         switch (c) {
             case '?': addToken(QUESTION); break;
             case ':': addToken(COLON); break;
+            case ';': 
+                addToken(EOS); 
+                discard_whitespaces();
+                break;
             case '(': addToken(LEFT_PAREN); break;
             case ')': addToken(RIGHT_PAREN); break;
             case '[': addToken(LEFT_SQUARE); break;
@@ -127,7 +131,7 @@ class Scanner {
                 break;
             case '\n': // also used as end of statement
                 // skip duplicate new lines, speed up a little
-                addToken(NL);
+                addToken(EOS);
                 line++;
                 discard_whitespaces();
                 break;
