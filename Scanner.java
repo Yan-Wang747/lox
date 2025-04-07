@@ -33,6 +33,8 @@ class Scanner {
         keywords.put("mut",    MUT);
         keywords.put("var",    VAR);
         keywords.put("while",  WHILE);
+        keywords.put("break",  BREAK);
+        keywords.put("continue", CONTINUE);
         keywords.put("str",    STR_TYPE);
         keywords.put("num",    NUM_TYPE);
         keywords.put("bool",   BOOL_TYPE);

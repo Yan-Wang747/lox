@@ -55,7 +55,7 @@ class Parser {
     }
 
     private VariableTable variableTable = new VariableTable();
-    
+    private boolean inLoop = false;
     private static class ParseError extends RuntimeException {}
 
     private final List<Token> tokens;
@@ -150,6 +150,15 @@ class Parser {
             return whileStatement();
         }
 
+        if (match(BREAK, CONTINUE)) {
+            Token keyword = previous();
+            consume(EOS, "Expect 'EOS' after " + keyword.lexeme + ".");
+            if (!inLoop) {
+                throw error(keyword, keyword.lexeme + " is not inside a loop.");
+            }
+            return new Stmt.LoopTermination(keyword);
+        }
+
         if (match(FOR)) {
             return forStatement();
         }
@@ -222,9 +231,11 @@ class Parser {
         match(EOS); // skip empty lines
         consume(LEFT_BRACE, "Expect '{' after 'while'.");
 
+        inLoop = true;
         Stmt body = new Stmt.Block(block(new VariableTable(this.variableTable)));
+        inLoop = false;
 
-        return new Stmt.While(condition, body);
+        return new Stmt.While(condition, body, null);
     }
     
     private Stmt forStatement() {
@@ -263,21 +274,14 @@ class Parser {
                 increment = statement();
             }
             consume(LEFT_BRACE, "Expect '{' after increment.");
-        
+            
+            inLoop = true;
             Stmt body = new Stmt.Block(block(new VariableTable(this.variableTable)));
-
-            if (increment != null) {
-                body = new Stmt.Block(
-                    List.of(
-                        body, 
-                        increment
-                    )
-                );
-            }
+            inLoop = false;
 
             if (condition == null) 
                 condition = new Expr.Literal(true, new Token(BOOL_TYPE, "bool", null, previous().line));
-            body = new Stmt.While(condition, body);
+            body = new Stmt.While(condition, body, increment);
 
             if (initializer != null) {
                 body = new Stmt.Block(

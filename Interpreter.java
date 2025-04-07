@@ -162,9 +162,8 @@ class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
 
     private void executeBlock(Stmt.Block block, Environment newEnvironment) {
         Environment enclosing = this.environment;
+        this.environment = newEnvironment;
         try {
-            this.environment = newEnvironment;
-
             for (Stmt statement : block.statements) {
                 execute(statement);
             }
@@ -205,9 +204,32 @@ class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
     @Override
     public Void visit(Stmt.While stmt) {
         while ((boolean)evaluate(stmt.condition)) {
-            execute(stmt.body);
+            try {
+                execute(stmt.body);
+                if (stmt.increment != null) {
+                    execute(stmt.increment);
+                }
+            }
+            catch (RuntimeError error) {
+                if (error.token.isTokenType(TokenType.BREAK)) {
+                    break;
+                }
+                if (error.token.isTokenType(TokenType.CONTINUE)) {
+                    if (stmt.increment != null) {
+                        execute(stmt.increment);
+                    }
+                    continue;
+                }
+                // rethrow the error if it's not a break or continue
+                throw error;
+            }
         }
         return null;
+    }
+
+    @Override
+    public Void visit(Stmt.LoopTermination stmt) {
+        throw new RuntimeError(stmt.keyword, "Loop termination statement.");
     }
     
     @Override
