@@ -203,33 +203,23 @@ class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
     
     @Override
     public Void visit(Stmt.While stmt) {
+        // put the special variable break and contine to the env
+        Token breakToken = new Token(TokenType.IDENTIFIER, "break", null, 0);
+        Token continueToken = new Token(TokenType.IDENTIFIER, "continue", null, 0);
+        environment.define(breakToken, false);
+        environment.define(continueToken, false);
+        
         while ((boolean)evaluate(stmt.condition)) {
-            try {
-                execute(stmt.body);
-                if (stmt.increment != null) {
-                    execute(stmt.increment);
-                }
+            execute(stmt.body);
+            if ((boolean)environment.get(breakToken) && !(boolean)environment.get(continueToken))
+                break;
+
+            if (stmt.increment != null) {
+                execute(stmt.increment);
             }
-            catch (RuntimeError error) {
-                if (error.token.isTokenType(TokenType.BREAK)) {
-                    break;
-                }
-                if (error.token.isTokenType(TokenType.CONTINUE)) {
-                    if (stmt.increment != null) {
-                        execute(stmt.increment);
-                    }
-                    continue;
-                }
-                // rethrow the error if it's not a break or continue
-                throw error;
-            }
+            
         }
         return null;
-    }
-
-    @Override
-    public Void visit(Stmt.LoopTermination stmt) {
-        throw new RuntimeError(stmt.keyword, "Loop termination statement.");
     }
     
     @Override

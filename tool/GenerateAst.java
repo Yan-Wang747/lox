@@ -28,8 +28,7 @@ class GenerateAst {
             "Expression : Expr expression",
             "Print      : Expr expression",
             "While      : Expr condition, Stmt body, Stmt increment",
-            "VarDecl    : Token name, Expr initializer, boolean isMutable",
-            "LoopTermination : Token keyword"
+            "VarDecl    : Token name, Expr initializer, boolean isMutable"
         ));
 
     }

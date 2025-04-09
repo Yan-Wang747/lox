@@ -14,7 +14,6 @@ public abstract class Stmt {
         R visit(Print stmt);
         R visit(While stmt);
         R visit(VarDecl stmt);
-        R visit(LoopTermination stmt);
     }
 
     abstract <R> R accept(Visitor<R> visitor);
@@ -125,20 +124,6 @@ public abstract class Stmt {
             this.name = name;
             this.initializer = initializer;
             this.isMutable = isMutable;
-        }
-
-        @Override
-        <R> R accept(Visitor<R> visitor) {
-            return visitor.visit(this);
-        }
-    }
-
-    static class LoopTermination extends Stmt {
-
-        final Token keyword;
-
-        LoopTermination(Token keyword) {
-            this.keyword = keyword;
         }
 
         @Override

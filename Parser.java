@@ -54,8 +54,8 @@ class Parser {
         }
     }
 
+    private boolean hasLoopTermination = false;
     private VariableTable variableTable = new VariableTable();
-    private boolean inLoop = false;
     private static class ParseError extends RuntimeException {}
 
     private final List<Token> tokens;
@@ -74,6 +74,29 @@ class Parser {
 
             try {
                 statements.add(declaration());
+
+                if (hasLoopTermination) { // put remaining statements in a if block testing the break variable
+                    hasLoopTermination = false;
+
+                    current--; // recover the last EOS token for the next then block
+                    Stmt.Block thenBranch = new Stmt.Block(block(new VariableTable(this.variableTable)));
+                    current -= 2; // recover the last } EOS tokens for the current block
+
+                    if (!thenBranch.statements.isEmpty()) {
+                        Token name = new Token(TokenType.IDENTIFIER, "break", null, previous().line);
+                        Expr.Variable breakVari = new Expr.Variable(name, null, new Token(TokenType.BOOL_TYPE, "bool", null, previous().line));
+                        Expr.Unary notBreak = new Expr.Unary(
+                            new Token(BANG, "!", null, previous().line), 
+                            breakVari, 
+                            new Token(TokenType.BOOL_TYPE, "bool", null, previous().line)
+                        );
+                        Stmt.If ifStmt = new Stmt.If(notBreak, thenBranch, null);
+                        statements.add(ifStmt);
+                    }
+
+                    hasLoopTermination = true;
+                    break;
+                }
             }
             catch (ParseError error) {
                 synchronize();
@@ -150,13 +173,12 @@ class Parser {
             return whileStatement();
         }
 
-        if (match(BREAK, CONTINUE)) {
-            Token keyword = previous();
-            consume(EOS, "Expect 'EOS' after " + keyword.lexeme + ".");
-            if (!inLoop) {
-                throw error(keyword, keyword.lexeme + " is not inside a loop.");
-            }
-            return new Stmt.LoopTermination(keyword);
+        if (match(BREAK)) {
+            return breakStatement(false);
+        }
+
+        if (match(CONTINUE)) {
+            return breakStatement(true);
         }
 
         if (match(FOR)) {
@@ -177,18 +199,18 @@ class Parser {
     private Stmt ifStatement() {
         Expr condition = expression();
         if (condition.valueType.isNotTokenType(BOOL_TYPE)) {
-            throw error(condition.valueType, "requires bool condition.");
+            throw error(condition.valueType, "Requires bool condition.");
         }
         
         match(EOS); // skip empty lines
-        consume(LEFT_BRACE, "Expect '{' after 'if'.");
+        consume(LEFT_BRACE, "Expect '{' after condition.");
 
         Stmt thenBranch = new Stmt.Block(block(new VariableTable(this.variableTable)));
         Stmt elseBranch = null;
         if (match(ELSE)) {
             match(EOS); // skip empty lines
 
-            if (match(IF)) {
+            if (match(IF)) { // else if clause
                 elseBranch = ifStatement();
             }
             else {
@@ -200,9 +222,9 @@ class Parser {
         return new Stmt.If(condition, thenBranch, elseBranch);
     }
     
-    private List<Stmt> block(VariableTable newVariableTable) {
+    private List<Stmt> block(VariableTable newVarTable) {
         VariableTable enclosing = this.variableTable;
-        this.variableTable = newVariableTable;
+        this.variableTable = newVarTable;
         try {
             consume(EOS, "Expect 'EOS' after '{'.");
 
@@ -222,19 +244,57 @@ class Parser {
         return new Stmt.Print(value);
     }
     
+    private Stmt breakStatement(boolean isContinue) {
+        consume(EOS, "Expect 'EOS' after " + previous().lexeme + " statement.");
+        // skip following statements
+        while (!isAtEnd() && !check(RIGHT_BRACE)) {
+            advance();
+        }
+
+        // check if break/continue is inside a loop
+        if (variableTable.getType("break") == null) {
+            throw error(previous(), "Not inside a loop.");
+        }
+
+        hasLoopTermination = true;
+        // change break/continue variable to true
+        Stmt setBreak = new Stmt.Assign(
+            new Token(TokenType.IDENTIFIER, "break", null, previous().line), 
+            null, 
+            new Expr.Literal(true, new Token(TokenType.BOOL_TYPE, "bool", null, previous().line))
+        );
+        
+        if (isContinue) {
+            Stmt setContinue = new Stmt.Assign(
+                new Token(TokenType.IDENTIFIER, "continue", null, previous().line), 
+                null, 
+                new Expr.Literal(true, new Token(TokenType.BOOL_TYPE, "bool", null, previous().line))
+            );
+
+            return new Stmt.Block(List.of(setBreak, setContinue));
+        }
+        
+        return new Stmt.Block(List.of(setBreak));
+    }
+
     private Stmt whileStatement() {
         Expr condition = expression();
         if (condition.valueType.isNotTokenType(BOOL_TYPE)) {
-            throw error(condition.valueType, "requires bool condition.");
+            throw error(condition.valueType, "Requires bool condition.");
         }
         
         match(EOS); // skip empty lines
         consume(LEFT_BRACE, "Expect '{' after 'while'.");
 
-        inLoop = true;
-        Stmt body = new Stmt.Block(block(new VariableTable(this.variableTable)));
-        inLoop = false;
+        // create special 'continue' and 'break' variables
+        VariableTable newVarTable = new VariableTable(this.variableTable);
+        Token varType = new Token(TokenType.BOOL_TYPE, "bool", null, previous().line);
+        newVarTable.add("continue", varType, true);
+        newVarTable.add("break", varType, true);
+        
+        Stmt body = new Stmt.Block(block(newVarTable));
 
+        hasLoopTermination = false; // reset at the end of each loop
         return new Stmt.While(condition, body, null);
     }
     
@@ -253,7 +313,7 @@ class Parser {
                 initializer = varDeclaration(true);
             }
             else if (match(VAR)) {
-                throw error(previous(), "variable in initializer must be mutable.");
+                throw error(previous(), "Variable in initializer must be mutable.");
             }
             else {
                 Expr targetExpr = expression();
@@ -264,7 +324,7 @@ class Parser {
             if (!check(EOS)) {
                 condition = expression();
                 if (condition.valueType.isNotTokenType(BOOL_TYPE)) {
-                    throw error(condition.valueType, "requires bool condition.");
+                    throw error(condition.valueType, "Requires bool condition.");
                 }
             }
             consume(EOS, "Expect ';' after loop condition.");
@@ -275,9 +335,13 @@ class Parser {
             }
             consume(LEFT_BRACE, "Expect '{' after increment.");
             
-            inLoop = true;
-            Stmt body = new Stmt.Block(block(new VariableTable(this.variableTable)));
-            inLoop = false;
+            // create special 'continue' and 'break' variables
+            VariableTable newVarTable = new VariableTable(this.variableTable);
+            Token varType = new Token(TokenType.BOOL_TYPE, "bool", null, previous().line);
+            newVarTable.add("continue", varType, true);
+            newVarTable.add("break", varType, true);
+
+            Stmt body = new Stmt.Block(block(newVarTable));
 
             if (condition == null) 
                 condition = new Expr.Literal(true, new Token(BOOL_TYPE, "bool", null, previous().line));
@@ -296,6 +360,7 @@ class Parser {
         }
         finally {
             this.variableTable = enclosing;
+            hasLoopTermination = false; // reset at the end of each loop
         }
     }
     
@@ -317,7 +382,7 @@ class Parser {
         }
 
         if (valueTypeIsDifferent(targetExpr, r_value) && r_value.valueType.isNotTokenType(NIL)) {
-            throw error(name, "requires both operands to be of the same type.");
+            throw error(name, "Requires both operands to be of the same type.");
         }
 
         consume(EOS, "Expect 'EOS' after assignment.");
@@ -372,7 +437,7 @@ class Parser {
             Expr right = ternaryConditional();
 
             if (valueTypeIsDifferent(expr, right)) {
-                throw error(operator, "requires both operands to be of the same type.");
+                throw error(operator, "Requires both operands to be of the same type.");
             }
 
             expr = new Expr.Binary(expr, operator, right, expr.valueType); 
@@ -389,7 +454,7 @@ class Parser {
             while (match(EOS)); // skip empty lines
             
             if (expr.valueType.isNotTokenType(BOOL_TYPE)) {
-                throw error(operator, "requires bool condition.");
+                throw error(operator, "Requires bool condition.");
             }
 
             Expr thenBranch = ternaryConditional();
@@ -398,7 +463,7 @@ class Parser {
             Expr elseBranch = ternaryConditional();
 
             if (valueTypeIsDifferent(thenBranch, elseBranch)) {
-                throw error(operator, "requires both branches to be of the same type.");
+                throw error(operator, "Requires both branches to be of the same type.");
             }
 
             expr = new Expr.TernaryConditional(expr, operator, thenBranch, elseBranch, thenBranch.valueType); 
@@ -415,7 +480,7 @@ class Parser {
             Expr right = and();
             
             if (expr.valueType.isNotTokenType(BOOL_TYPE) || right.valueType.isNotTokenType(BOOL_TYPE)) {
-                throw error(operator, "requires both operands to be of the bool type.");
+                throw error(operator, "Requires both operands to be of the bool type.");
             }
 
             expr = new Expr.Logical(expr, operator, right, new Token(TokenType.BOOL_TYPE, "bool", null, operator.line));
@@ -432,7 +497,7 @@ class Parser {
             Expr right = equality();
 
             if (expr.valueType.isNotTokenType(BOOL_TYPE) || right.valueType.isNotTokenType(BOOL_TYPE)) {
-                throw error(operator, "requires both operands to be of the bool type.");
+                throw error(operator, "Requires both operands to be of the bool type.");
             }
 
             expr = new Expr.Logical(expr, operator, right, new Token(TokenType.BOOL_TYPE, "bool", null, operator.line));
@@ -457,7 +522,7 @@ class Parser {
             Expr right = comparison();
 
             if (valueTypeIsDifferent(expr, right)) {
-                throw error(operator, "requires both operands to be of the same type.");
+                throw error(operator, "Requires both operands to be of the same type.");
             }
             if (expr.valueType.isNotTokenType(NUM_TYPE) && expr.valueType.isNotTokenType(BOOL_TYPE)) {
                 throw error(operator, "does not support " + expr.valueType.lexeme);
@@ -485,7 +550,7 @@ class Parser {
             Expr right = term();
 
             if (valueTypeIsDifferent(expr, right)) {
-                throw error(operator, "requires both operands to be of the same type.");
+                throw error(operator, "Requires both operands to be of the same type.");
             }
             if (expr.valueType.isNotTokenType(NUM_TYPE) && expr.valueType.isNotTokenType(STR_TYPE)) {
                 throw error(operator, "does not support " + expr.valueType.lexeme);
@@ -513,7 +578,7 @@ class Parser {
             Expr right = factor();
 
             if (valueTypeIsDifferent(expr, right)) {
-                throw error(operator, "requires both operands to be of the same type.");
+                throw error(operator, "Requires both operands to be of the same type.");
             }
             if (operator.isTokenType(PLUS))
                 if (expr.valueType.isNotTokenType(NUM_TYPE) && 
