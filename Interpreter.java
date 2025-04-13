@@ -7,93 +7,28 @@ import java.util.ArrayList;
 
 class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
     
-    private class Environment {
-        private final Environment enclosing;
-        private final Map<String, Object> values = new HashMap<>();
+    Environment globals = new Environment();
+    private Environment currentEnv = globals;
 
-        Environment() {
-            this.enclosing = null;
-        }
-
-        Environment(Environment enclosing) {
-            this.enclosing = enclosing;
-        }
-
-        void define(Token name, Object value) {
-            values.put(name.lexeme, value);
-        }
-
-        Object get(Token name) {
-            if (values.containsKey(name.lexeme)) {
-                return values.get(name.lexeme);
+    Interpreter() {
+        // Define the global variables here
+        globals.define(new Token(TokenType.IDENTIFIER, "clock", null, 0), new LoxCallable() {
+            @Override
+            public int arity() {
+                return 0;
             }
 
-            if (enclosing != null) 
-                return enclosing.get(name);
-
-            throw new RuntimeError(name, "Undefined variable '" + name.lexeme + "'.");
-        }
-
-        Object get(Token name, int index) {
-            if (values.containsKey(name.lexeme)) {
-                List<Object> list = (List<Object>) values.get(name.lexeme);
-
-                // normalize negative index
-                if (index < 0)
-                    index = list.size() + index;
-            
-                if (index < 0 || index >= list.size())
-                    throw new RuntimeError(name, "Index out of bounds: " + index);
-            
-                return list.get(index);
+            @Override
+            public Object call(Interpreter interpreter, List<Object> arguments) {
+                return (double)System.currentTimeMillis() / 1000.0;
             }
 
-            if (enclosing != null) 
-                return enclosing.get(name, index);
-
-            throw new RuntimeError(name, "Undefined variable '" + name.lexeme + "'.");
-        }
-        
-        void assign(Token name, Object value) {
-            if (values.containsKey(name.lexeme)) {
-                values.put(name.lexeme, value);
-                return;
+            @Override
+            public String toString() {
+                return "<native fn>";
             }
-
-            if (enclosing != null) {
-                enclosing.assign(name, value);
-                return;
-            }
-            
-            throw new RuntimeError(name, "Undefined variable '" + name.lexeme + "'.");
-        }
-    
-        void assign(Token name, int index, Object value) // used for list item assignment
-        {
-            if (values.containsKey(name.lexeme)) {
-                List<Object> list = (List<Object>) values.get(name.lexeme);
-
-                // normalize negative index
-                if (index < 0)
-                    index = list.size() + index;
-                
-                if (index < 0 || index >= list.size())
-                    throw new RuntimeError(name, "Index out of bounds: " + index);
-
-                list.set(index, value);
-                return;
-            }
-
-            if (enclosing != null) {
-                enclosing.assign(name, index, value);
-                return;
-            }
-            
-            throw new RuntimeError(name, "Undefined variable '" + name.lexeme + "'.");
-        }
+        });
     }
-
-    private Environment environment = new Environment();
 
     void interpret(List<Stmt> statements) {
         try {
@@ -156,32 +91,26 @@ class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
 
     @Override
     public Void visit(Stmt.Block stmt) {
-        executeBlock(stmt, new Environment(this.environment));
+        executeBlock(stmt.statements, new Environment(this.currentEnv));
         return null;
     }
 
-    private void executeBlock(Stmt.Block block, Environment newEnvironment) {
-        Environment enclosing = this.environment;
-        this.environment = newEnvironment;
+    void executeBlock(List<Stmt> statements, Environment newEnvironment) {
+        Environment enclosing = this.currentEnv;
+        this.currentEnv = newEnvironment;
         try {
-            for (Stmt statement : block.statements) {
+            for (Stmt statement : statements) {
                 execute(statement);
             }
         } finally {
-            this.environment = enclosing;
+            this.currentEnv = enclosing;
         }
     }
 
     @Override
     public Void visit(Stmt.Assign stmt) {
         Object value = evaluate(stmt.value);
-        if (stmt.index != null) // handle list item assignment
-        {
-            int index = (int)(double) evaluate(stmt.index);
-            environment.assign(stmt.name, index, value);
-        }
-        else
-            environment.assign(stmt.name, value);
+        currentEnv.assign(stmt.name, value);
         
         return null;
     }
@@ -190,7 +119,7 @@ class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
     public Void visit(Stmt.VarDecl stmt) {
         Object value = evaluate(stmt.initializer);
 
-        environment.define(stmt.name, value);
+        currentEnv.define(stmt.name, value);
         return null;
     }
 
@@ -206,12 +135,12 @@ class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
         // put the special variable break and contine to the env
         Token breakToken = new Token(TokenType.IDENTIFIER, "break", null, 0);
         Token continueToken = new Token(TokenType.IDENTIFIER, "continue", null, 0);
-        environment.define(breakToken, false);
-        environment.define(continueToken, false);
+        currentEnv.define(breakToken, false);
+        currentEnv.define(continueToken, false);
         
         while ((boolean)evaluate(stmt.condition)) {
             execute(stmt.body);
-            if ((boolean)environment.get(breakToken) && !(boolean)environment.get(continueToken))
+            if ((boolean)currentEnv.get(breakToken) && !(boolean)currentEnv.get(continueToken))
                 break;
 
             if (stmt.increment != null) {
@@ -225,6 +154,13 @@ class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
     @Override
     public Void visit(Stmt.Expression stmt) {
         evaluate(stmt.expression);
+        return null;
+    }
+
+    @Override
+    public Void visit(Stmt.Function stmt) {
+        LoxFunction function = new LoxFunction(stmt);
+        currentEnv.define(stmt.name, function);
         return null;
     }
 
@@ -277,13 +213,30 @@ class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
     }
 
     @Override
-    public Object visit(Expr.Variable expr) {
-        if (expr.indexExpr != null) // handle list item access
-        {
-            int index = (int)(double) evaluate(expr.indexExpr);
-            return environment.get(expr.name, index);
+    public Object visit(Expr.Call expr) {
+        Object callee = evaluate(expr.callee);
+        List<Object> arguments = new ArrayList<>();
+
+        for (Expr argument : expr.arguments) {
+            arguments.add(evaluate(argument));
         }
-        return environment.get(expr.name);
+
+        if (!(callee instanceof LoxCallable)) {
+            throw new RuntimeError(expr.paren, "Can only call functions and classes.");
+        }
+
+        LoxCallable function = (LoxCallable) callee;
+
+        if (arguments.size() != function.arity()) {
+            throw new RuntimeError(expr.paren, "Expected " + function.arity() + " arguments but got " + arguments.size() + ".");
+        }
+
+        return function.call(this, arguments);
+    }
+
+    @Override
+    public Object visit(Expr.Variable expr) {
+        return currentEnv.get(expr.name);
     }
 
     @Override

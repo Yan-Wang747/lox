@@ -1,7 +1,7 @@
 package lox;
 
 enum TokenType {
-    LEFT_PAREN, RIGHT_PAREN, LEFT_BRACE, RIGHT_BRACE, LEFT_SQUARE, RIGHT_SQUARE,
+    LEFT_PAREN, RIGHT_PAREN, LEFT_BRACE, RIGHT_BRACE,
     COMMA, DOT, MINUS, PLUS, SLASH, STAR,
 
     BANG, BANG_EQUAL, EQUAL, EQUAL_EQUAL,
@@ -15,7 +15,7 @@ enum TokenType {
 
     QUESTION, COLON,
 
-    STR_TYPE, NUM_TYPE, BOOL_TYPE, LIST_TYPE, // type keywords
+    STR_TYPE, NUM_TYPE, BOOL_TYPE, // type keywords
 
     EOS, EOF
 }

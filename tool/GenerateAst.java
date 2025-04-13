@@ -16,16 +16,18 @@ class GenerateAst {
             "Grouping   : Expr expression, Token valueType",
             "Literal    : Object value, Token valueType",
             "Logical    : Expr left, Token operator, Expr right, Token valueType",
-            "Variable   : Token name, Expr indexExpr, Token valueType",
+            "Variable   : Token name, Token valueType",
             "Unary      : Token operator, Expr right, Token valueType",
-            "TernaryConditional : Expr condition, Token question, Expr thenBranch, Expr elseBranch, Token valueType"
+            "TernaryConditional : Expr condition, Token question, Expr thenBranch, Expr elseBranch, Token valueType",
+            "Call       : Expr callee, Token paren, List<Expr> arguments, Token valueType"
             ));
         
         defineAst(outputDir, "Stmt", Arrays.asList(
             "If         : Expr condition, Stmt thenBranch, Stmt elseBranch",  
             "Block      : List<Stmt> statements",
-            "Assign     : Token name, Expr index, Expr value",
+            "Assign     : Token name, Expr value",
             "Expression : Expr expression",
+            "Function   : Token name, List<Token> params, List<Stmt> body",
             "Print      : Expr expression",
             "While      : Expr condition, Stmt body, Stmt increment",
             "VarDecl    : Token name, Expr initializer, boolean isMutable"
@@ -41,23 +43,21 @@ class GenerateAst {
         writer.println();
         writer.println("import java.util.List;");
         writer.println();
-        writer.println("public abstract class " + baseName + " {");
-        writer.println();
-        if (baseName.equals("Expr"))
-            writer.println("    final Token valueType;");
+        writer.println("abstract class " + baseName + " {");
         writer.println();
 
-        // add the constructor
         if (baseName.equals("Expr")) {
-            writer.println("    " + baseName + "(Token valueType) {");
+            writer.println("    final Token valueType;");
+            writer.println();
+            writer.println("    " + baseName + "(Token valueType) {"); // add the constructor
             writer.println("        this.valueType = valueType;");
             writer.println("    }");
+            writer.println();
         }
 
         defineVisitor(writer, baseName, types);
         
         // The base accept() method
-        writer.println();
         writer.println("    abstract <R> R accept(Visitor<R> visitor);");
         
         // The AST classes
@@ -109,7 +109,6 @@ class GenerateAst {
     }
 
     private static void defineVisitor(PrintWriter writer, String baseName, List<String> types) {
-        writer.println();
         writer.println("    interface Visitor<R> {");
 
         for (String type : types) {
@@ -118,5 +117,6 @@ class GenerateAst {
         }
 
         writer.println("    }");
+        writer.println();
     }
 }

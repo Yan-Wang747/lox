@@ -84,7 +84,7 @@ class Parser {
 
                     if (!thenBranch.statements.isEmpty()) {
                         Token name = new Token(TokenType.IDENTIFIER, "break", null, previous().line);
-                        Expr.Variable breakVari = new Expr.Variable(name, null, new Token(TokenType.BOOL_TYPE, "bool", null, previous().line));
+                        Expr.Variable breakVari = new Expr.Variable(name, new Token(TokenType.BOOL_TYPE, "bool", null, previous().line));
                         Expr.Unary notBreak = new Expr.Unary(
                             new Token(BANG, "!", null, previous().line), 
                             breakVari, 
@@ -107,14 +107,68 @@ class Parser {
     }
 
     private Stmt declaration() {
-        if (match(VAR))
-            return varDeclaration(false);
-
-        if (match(MUT)) {
-            return varDeclaration(true);
+        if (match(FUN)) {
+            return function("function");
         }
-            
+
+        if (match(VAR)) {
+            return varDeclaration(match(MUT));
+        }
+
         return statement();
+    }
+
+    private Stmt.Function function(String kind) {
+        Token name = consume(IDENTIFIER, "Expect " + kind + " name.");
+        match(EOS);
+        consume(LEFT_PAREN, "Expect '(' after " + kind + " name.");
+        List<Token> params = new ArrayList<>();
+        VariableTable functionScope = new VariableTable(this.variableTable);
+        do {
+            match(EOS); // skip empty lines
+            if (check(RIGHT_PAREN)) break;
+            if (params.size() >= 255) {
+                error(peek(), "Cannot have more than 255 parameters.");
+            }
+            
+            boolean isMutable = match(MUT);
+            params.add(consume(IDENTIFIER, "Expect parameter name."));
+            consume(COLON, "Expect ':' after parameter name.");
+
+            Token paramType = null;
+            if (match(NUM_TYPE, STR_TYPE, BOOL_TYPE)) {
+                paramType = previous();
+            }
+            else {
+                paramType = advance();
+                throw error(name, "Invalid type '" + paramType.lexeme + "'.");
+            }
+
+            functionScope.add(params.get(params.size() - 1).lexeme, paramType, isMutable);
+
+        } while (match(COMMA));
+
+        match(EOS); // skip empty lines
+        consume(RIGHT_PAREN, "Expect ')' after parameters.");
+
+        Token returnType = new Token(NIL, "nil", null, 0);
+        if (match(COLON)) {
+            if (match(NUM_TYPE, STR_TYPE, BOOL_TYPE)) {
+                returnType = previous();
+            }
+            else {
+                returnType = advance();
+                throw error(name, "Invalid type '" + returnType.lexeme + "'.");
+            }
+        }
+        this.variableTable.add(name.lexeme, returnType, false); // allow redeclaration of functions
+        
+        match(EOS); // skip empty lines
+
+        consume(LEFT_BRACE, "Expect '{' before " + kind + " body.");
+        List<Stmt> body = block(functionScope);
+
+        return new Stmt.Function(name, params, body);
     }
 
     private Stmt varDeclaration(boolean isMutable) {
@@ -124,11 +178,11 @@ class Parser {
         Token name = consume(IDENTIFIER, "Expect variable/constant name.");
         Token varType = null;
         if (match(COLON)) {
-            varType = advance();
-            if (varType.isNotTokenType(NUM_TYPE) && 
-                varType.isNotTokenType(STR_TYPE) && 
-                varType.isNotTokenType(BOOL_TYPE) && 
-                varType.isNotTokenType(LIST_TYPE)) {
+            if (match(NUM_TYPE, STR_TYPE, BOOL_TYPE)) {
+                varType = previous();
+            }
+            else {
+                varType = advance();
                 throw error(name, "Invalid type '" + varType.lexeme + "'.");
             }
         }
@@ -260,14 +314,12 @@ class Parser {
         // change break/continue variable to true
         Stmt setBreak = new Stmt.Assign(
             new Token(TokenType.IDENTIFIER, "break", null, previous().line), 
-            null, 
             new Expr.Literal(true, new Token(TokenType.BOOL_TYPE, "bool", null, previous().line))
         );
         
         if (isContinue) {
             Stmt setContinue = new Stmt.Assign(
-                new Token(TokenType.IDENTIFIER, "continue", null, previous().line), 
-                null, 
+                new Token(TokenType.IDENTIFIER, "continue", null, previous().line),  
                 new Expr.Literal(true, new Token(TokenType.BOOL_TYPE, "bool", null, previous().line))
             );
 
@@ -367,26 +419,13 @@ class Parser {
     private Stmt assignmentStatement(Expr targetExpr) {
         Token name = get_left_value(targetExpr);
         Expr r_value = expression();
-        
-        // handle list item assignment
-        if (targetExpr instanceof Expr.Variable) { 
-            Expr.Variable targetVarExpr = (Expr.Variable)targetExpr;
-            if (targetVarExpr.valueType.isTokenType(LIST_TYPE)) { 
-                if (!targetVarExpr.valueType.lexeme.equals("[" + r_value.valueType.lexeme + "]")) {
-                    throw error(name, "List type '" + targetVarExpr.valueType.lexeme + "' does not match r_value type '" + r_value.valueType.lexeme + "'.");
-                }
-
-                consume(EOS, "Expect 'EOS' after assignment.");
-                return new Stmt.Assign(name, targetVarExpr.indexExpr, r_value);
-            }
-        }
 
         if (valueTypeIsDifferent(targetExpr, r_value) && r_value.valueType.isNotTokenType(NIL)) {
             throw error(name, "Requires both operands to be of the same type.");
         }
 
         consume(EOS, "Expect 'EOS' after assignment.");
-        return new Stmt.Assign(name, null, r_value);
+        return new Stmt.Assign(name, r_value);
     }
 
     private Token get_left_value(Expr expr) {
@@ -582,8 +621,7 @@ class Parser {
             }
             if (operator.isTokenType(PLUS))
                 if (expr.valueType.isNotTokenType(NUM_TYPE) && 
-                    expr.valueType.isNotTokenType(STR_TYPE) &&
-                    expr.valueType.isNotTokenType(LIST_TYPE)) {
+                    expr.valueType.isNotTokenType(STR_TYPE)) {
                     throw error(operator, "does not support " + expr.valueType.lexeme);
                 }
             if (operator.isTokenType(MINUS) && expr.valueType.isNotTokenType(NUM_TYPE)) {
@@ -616,8 +654,7 @@ class Parser {
                 throw error(operator, "does not support " + expr.valueType.lexeme + ", " + right.valueType.lexeme);
             }
             if (operator.isTokenType(STAR))
-                if (expr.valueType.isNotTokenType(LIST_TYPE) && 
-                    expr.valueType.isNotTokenType(NUM_TYPE) &&
+                if (expr.valueType.isNotTokenType(NUM_TYPE) &&
                     expr.valueType.isNotTokenType(STR_TYPE)) {
                     throw error(operator, "does not support " + expr.valueType.lexeme + ", " + right.valueType.lexeme);
                 }
@@ -647,7 +684,38 @@ class Parser {
             return new Expr.Unary(operator, right, right.valueType);
         }
 
-        return primary();
+        return call();
+    }
+
+    private Expr call() {
+        Expr expr = primary();
+
+        while (true) {
+            if (match(LEFT_PAREN)) {
+                expr = finishCall(expr);
+            }
+            else {
+                break;
+            }
+        }
+
+        return expr;
+    }
+
+    private Expr finishCall(Expr expr) {
+        List<Expr> arguments = new ArrayList<>();
+        
+        do {
+            match(EOS); // skip empty lines
+            if (check(RIGHT_PAREN)) break;
+            if (arguments.size() >= 255) {
+                error(peek(), "Cannot have more than 255 arguments.");
+            }
+            arguments.add(ternaryConditional()); // comma expression is not allowed
+        } while (match(COMMA));
+
+        Token paren = consume(RIGHT_PAREN, "Expect ')' after arguments.");
+        return new Expr.Call(expr, paren, arguments, expr.valueType);
     }
 
     private Expr primary() {
@@ -677,30 +745,6 @@ class Parser {
             return new Expr.Grouping(expr, expr.valueType);
         }
 
-        if (match(LEFT_SQUARE)) {
-            List<Expr> itemExprs = new ArrayList<>();
-            Expr itemExpr = ternaryConditional(); // must be at least one item
-            Token itemValueType = itemExpr.valueType;
-            itemExprs.add(itemExpr);
-            String listTypeLexeme = "[" + itemValueType.lexeme + "]";
-            
-            while (match(COMMA)) {
-                // comma expression is not allowed
-                itemExpr = ternaryConditional();
-                if (itemExpr.valueType.isNotTokenType(itemValueType.tokenType))
-                    throw error(previous(), "List type '" + listTypeLexeme + "' does not match item type '" + itemExpr.valueType.lexeme + "'.");
-                
-                itemExprs.add(itemExpr);
-            }
-
-            consume(RIGHT_SQUARE, "Expect ']' after list.");
-
-            return new Expr.List_(
-                itemExprs, 
-                new Token(LIST_TYPE, listTypeLexeme, null, previous().line)
-            );
-        }
-
         if (match(IDENTIFIER)) {
             Token id = previous();
             Token id_type = variableTable.getType(id.lexeme);
@@ -708,17 +752,7 @@ class Parser {
                 throw error(previous(), "Undefined variable '" + previous().lexeme + "'.");
             }
 
-            Expr indexExpr = null;
-            if (id_type.isTokenType(LIST_TYPE)) {
-                consume(LEFT_SQUARE, "Expect '[' after list variable.");
-                indexExpr = expression();
-                if (indexExpr.valueType.isNotTokenType(NUM_TYPE)) {
-                    throw error(id, "List only supports integer index.");
-                }
-                consume(RIGHT_SQUARE, "Expect ']' after list variable.");
-            }
-
-            return new Expr.Variable(id, indexExpr, id_type);
+            return new Expr.Variable(id, id_type);
         }
 
         throw error(peek(), "Expect expression.");

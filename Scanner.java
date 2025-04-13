@@ -38,7 +38,6 @@ class Scanner {
         keywords.put("str",    STR_TYPE);
         keywords.put("num",    NUM_TYPE);
         keywords.put("bool",   BOOL_TYPE);
-        keywords.put("list",   LIST_TYPE);
     }
 
     Scanner(String source) {
@@ -90,8 +89,6 @@ class Scanner {
                 break;
             case '(': addToken(LEFT_PAREN); break;
             case ')': addToken(RIGHT_PAREN); break;
-            case '[': addToken(LEFT_SQUARE); break;
-            case ']': addToken(RIGHT_SQUARE); break;
             case '{': addToken(LEFT_BRACE); break;
             case '}': addToken(RIGHT_BRACE); break;
             case ',': addToken(COMMA); break;

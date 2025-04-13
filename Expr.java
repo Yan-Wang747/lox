@@ -2,7 +2,7 @@ package lox;
 
 import java.util.List;
 
-public abstract class Expr {
+abstract class Expr {
 
     final Token valueType;
 
@@ -19,6 +19,7 @@ public abstract class Expr {
         R visit(Variable expr);
         R visit(Unary expr);
         R visit(TernaryConditional expr);
+        R visit(Call expr);
     }
 
     abstract <R> R accept(Visitor<R> visitor);
@@ -109,12 +110,10 @@ public abstract class Expr {
     static class Variable extends Expr {
 
         final Token name;
-        final Expr indexExpr;
 
-        Variable(Token name, Expr indexExpr, Token valueType) {
+        Variable(Token name, Token valueType) {
             super(valueType);
             this.name = name;
-            this.indexExpr = indexExpr;
         }
 
         @Override
@@ -153,6 +152,25 @@ public abstract class Expr {
             this.question = question;
             this.thenBranch = thenBranch;
             this.elseBranch = elseBranch;
+        }
+
+        @Override
+        <R> R accept(Visitor<R> visitor) {
+            return visitor.visit(this);
+        }
+    }
+
+    static class Call extends Expr {
+
+        final Expr callee;
+        final Token paren;
+        final List<Expr> arguments;
+
+        Call(Expr callee, Token paren, List<Expr> arguments, Token valueType) {
+            super(valueType);
+            this.callee = callee;
+            this.paren = paren;
+            this.arguments = arguments;
         }
 
         @Override
