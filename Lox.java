@@ -73,8 +73,8 @@ class Lox{
         if (token.tokenType == TokenType.EOF) {
             report(token.line, " at end", message);
         }
-        else if (token.tokenType == TokenType.EOS) {
-            report(token.line, " at EOS", message);
+        else if (token.tokenType == TokenType.NL) {
+            report(token.line, " at the line end", message);
         }
         else {
             report(token.line, " at '" + token.lexeme + "'", message);

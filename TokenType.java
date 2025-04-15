@@ -13,9 +13,9 @@ enum TokenType {
     PRINT, RETURN, SUPER, THIS, TRUE, VAR, MUT, WHILE,
     BREAK, CONTINUE,
 
-    QUESTION, COLON,
+    QUESTION, COLON, SEMICOLON,
 
     STR_TYPE, NUM_TYPE, BOOL_TYPE, // type keywords
 
-    EOS, EOF
+    NL, EOF
 }

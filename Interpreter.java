@@ -131,6 +131,15 @@ class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
     }
     
     @Override
+    public Void visit(Stmt.Return stmt) {
+        Object value = null;
+        if (stmt.value != null) {
+            value = evaluate(stmt.value);
+        }
+        throw new Return(value);
+    }
+    
+    @Override
     public Void visit(Stmt.While stmt) {
         // put the special variable break and contine to the env
         Token breakToken = new Token(TokenType.IDENTIFIER, "break", null, 0);

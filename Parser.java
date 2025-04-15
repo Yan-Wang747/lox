@@ -60,6 +60,7 @@ class Parser {
 
     private final List<Token> tokens;
     private int current = 0;
+    private TokenType EOS = TokenType.NL;
 
     Parser(List<Token> tokens) {
         this.tokens = tokens;
@@ -172,9 +173,6 @@ class Parser {
     }
 
     private Stmt varDeclaration(boolean isMutable) {
-        if (isMutable)
-            consume(VAR, "Expect 'var' after 'mut'.");
-
         Token name = consume(IDENTIFIER, "Expect variable/constant name.");
         Token varType = null;
         if (match(COLON)) {
@@ -203,7 +201,7 @@ class Parser {
             }
         }
         
-        consume(EOS, "Expect 'EOS' after variable/constant declaration.");
+        consume(EOS, "Expect '" + EOS + "' after variable/constant declaration.");
         variableTable.add(name.lexeme, varType, isMutable); // allow redeclaration of variables
 
         return new Stmt.VarDecl(name, initializer, isMutable);
@@ -221,6 +219,10 @@ class Parser {
 
         if (match(PRINT)) {
             return printStatement();
+        }
+
+        if (match(RETURN)) {
+            return returnStatement();
         }
 
         if (match(WHILE)) {
@@ -280,11 +282,11 @@ class Parser {
         VariableTable enclosing = this.variableTable;
         this.variableTable = newVarTable;
         try {
-            consume(EOS, "Expect 'EOS' after '{'.");
+            consume(EOS, "Expect '" + EOS + "' after '{'.");
 
             List<Stmt> statements = parse();
             consume(RIGHT_BRACE, "Expect '}' after block.");
-            consume(EOS, "Expect 'EOS' after '}'.");
+            consume(EOS, "Expect '" + EOS + "' after '}'.");
             return statements;
         }
         finally {
@@ -294,12 +296,23 @@ class Parser {
     
     private Stmt printStatement() {
         Expr value = expression();
-        consume(EOS, "Expect 'EOS' after the print statement.");
+        consume(EOS, "Expect '" + EOS + "' after the print statement.");
         return new Stmt.Print(value);
     }
     
+    private Stmt returnStatement() {
+        Token keyword = previous();
+        if (match(EOS)) {
+            return new Stmt.Return(keyword, null);
+        }
+        Expr value = expression();
+        consume(EOS, "Expect '" + EOS + "' after return statement.");
+
+        return new Stmt.Return(keyword, value);
+    }
+
     private Stmt breakStatement(boolean isContinue) {
-        consume(EOS, "Expect 'EOS' after " + previous().lexeme + " statement.");
+        consume(EOS, "Expect '" + EOS + "' after " + previous().lexeme + " statement.");
         // skip following statements
         while (!isAtEnd() && !check(RIGHT_BRACE)) {
             advance();
@@ -355,22 +368,22 @@ class Parser {
         VariableTable enclosing = this.variableTable;
         VariableTable newVariableTable = new VariableTable(enclosing);
         this.variableTable = newVariableTable;
+        this.EOS = TokenType.SEMICOLON; // allow ';' as EOS in for initializer
 
         try {
             Stmt initializer = null;
             if (match(EOS)) {
                 initializer = null;
             }
-            else if (match(MUT)) {
-                initializer = varDeclaration(true);
-            }
             else if (match(VAR)) {
-                throw error(previous(), "Variable in initializer must be mutable.");
+                consume(MUT, "Expect 'mut' after 'var' in loop initializer.");
+                initializer = varDeclaration(true);
             }
             else {
                 Expr targetExpr = expression();
                 initializer = assignmentStatement(targetExpr);
             }
+            this.EOS = TokenType.NL; // reset EOS to NL
 
             Expr condition = null;
             if (!check(EOS)) {
@@ -379,7 +392,7 @@ class Parser {
                     throw error(condition.valueType, "Requires bool condition.");
                 }
             }
-            consume(EOS, "Expect ';' after loop condition.");
+            consume(SEMICOLON, "Expect ';' after loop condition.");
 
             Stmt increment = null;
             if (!check(EOS)) {
@@ -413,6 +426,7 @@ class Parser {
         finally {
             this.variableTable = enclosing;
             hasLoopTermination = false; // reset at the end of each loop
+            this.EOS = TokenType.NL; // reset EOS to NL
         }
     }
     
@@ -424,7 +438,7 @@ class Parser {
             throw error(name, "Requires both operands to be of the same type.");
         }
 
-        consume(EOS, "Expect 'EOS' after assignment.");
+        consume(EOS, "Expect '" + EOS + "' after assignment.");
         return new Stmt.Assign(name, r_value);
     }
 
@@ -447,7 +461,7 @@ class Parser {
     }
 
     private Stmt expressionStatement(Expr expr) {
-        consume(EOS, "Expect 'EOS' after expression.");
+        consume(EOS, "Expect '" + EOS + "' after expression.");
         return new Stmt.Expression(expr);
     }
 
@@ -784,13 +798,14 @@ class Parser {
 
     private void synchronize() {
         while (!isAtEnd()) {
+            if (peek().isTokenType(EOS)) {
+                advance();
+                return;
+            }
+
             switch (peek().tokenType) {
-                case EOS:
-                    advance();
-                    return;
                 case CLASS:
                 case FUN:
-                case MUT:
                 case VAR:
                 case FOR:
                 case IF:
