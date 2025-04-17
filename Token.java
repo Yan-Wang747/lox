@@ -16,12 +16,4 @@ class Token {
     public String toString() {
         return tokenType + " " + lexeme + " " + literal;
     }
-
-    public boolean isTokenType(TokenType type) {
-        return this.tokenType == type;
-    }
-
-    public boolean isNotTokenType(TokenType type) {
-        return !this.isTokenType(type);
-    }
 }

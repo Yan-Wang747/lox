@@ -38,6 +38,7 @@ class Scanner {
         keywords.put("str",    STR_TYPE);
         keywords.put("num",    NUM_TYPE);
         keywords.put("bool",   BOOL_TYPE);
+        keywords.put("callable", CALLABLE);
     }
 
     Scanner(String source) {
@@ -54,7 +55,7 @@ class Scanner {
         }
 
         // add an NL, EOF token at the end
-        if (tokens.get(tokens.size() - 1).isNotTokenType(NL))
+        if (tokens.get(tokens.size() - 1).tokenType != NL)
             tokens.add(new Token(NL, "", null, line));
         
         tokens.add(new Token(EOF, "", null, line));

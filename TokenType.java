@@ -15,7 +15,7 @@ enum TokenType {
 
     QUESTION, COLON, SEMICOLON,
 
-    STR_TYPE, NUM_TYPE, BOOL_TYPE, // type keywords
+    STR_TYPE, NUM_TYPE, BOOL_TYPE, CALLABLE, // type keywords
 
     NL, EOF
 }

@@ -4,9 +4,9 @@ import java.util.List;
 
 abstract class Expr {
 
-    final Token valueType;
+    final TokenType valueType;
 
-    Expr(Token valueType) {
+    Expr(TokenType valueType) {
         this.valueType = valueType;
     }
 
@@ -27,10 +27,12 @@ abstract class Expr {
     static class List_ extends Expr {
 
         final List<Expr> items;
+        final TokenType valueType;
 
-        List_(List<Expr> items, Token valueType) {
+        List_(List<Expr> items, TokenType valueType) {
             super(valueType);
             this.items = items;
+            this.valueType = valueType;
         }
 
         @Override
@@ -44,12 +46,14 @@ abstract class Expr {
         final Expr left;
         final Token operator;
         final Expr right;
+        final TokenType valueType;
 
-        Binary(Expr left, Token operator, Expr right, Token valueType) {
+        Binary(Expr left, Token operator, Expr right, TokenType valueType) {
             super(valueType);
             this.left = left;
             this.operator = operator;
             this.right = right;
+            this.valueType = valueType;
         }
 
         @Override
@@ -61,10 +65,12 @@ abstract class Expr {
     static class Grouping extends Expr {
 
         final Expr expression;
+        final TokenType valueType;
 
-        Grouping(Expr expression, Token valueType) {
+        Grouping(Expr expression, TokenType valueType) {
             super(valueType);
             this.expression = expression;
+            this.valueType = valueType;
         }
 
         @Override
@@ -76,10 +82,12 @@ abstract class Expr {
     static class Literal extends Expr {
 
         final Object value;
+        final TokenType valueType;
 
-        Literal(Object value, Token valueType) {
+        Literal(Object value, TokenType valueType) {
             super(valueType);
             this.value = value;
+            this.valueType = valueType;
         }
 
         @Override
@@ -93,12 +101,14 @@ abstract class Expr {
         final Expr left;
         final Token operator;
         final Expr right;
+        final TokenType valueType;
 
-        Logical(Expr left, Token operator, Expr right, Token valueType) {
+        Logical(Expr left, Token operator, Expr right, TokenType valueType) {
             super(valueType);
             this.left = left;
             this.operator = operator;
             this.right = right;
+            this.valueType = valueType;
         }
 
         @Override
@@ -110,10 +120,12 @@ abstract class Expr {
     static class Variable extends Expr {
 
         final Token name;
+        final TokenType valueType;
 
-        Variable(Token name, Token valueType) {
+        Variable(Token name, TokenType valueType) {
             super(valueType);
             this.name = name;
+            this.valueType = valueType;
         }
 
         @Override
@@ -126,11 +138,13 @@ abstract class Expr {
 
         final Token operator;
         final Expr right;
+        final TokenType valueType;
 
-        Unary(Token operator, Expr right, Token valueType) {
+        Unary(Token operator, Expr right, TokenType valueType) {
             super(valueType);
             this.operator = operator;
             this.right = right;
+            this.valueType = valueType;
         }
 
         @Override
@@ -145,13 +159,15 @@ abstract class Expr {
         final Token question;
         final Expr thenBranch;
         final Expr elseBranch;
+        final TokenType valueType;
 
-        TernaryConditional(Expr condition, Token question, Expr thenBranch, Expr elseBranch, Token valueType) {
+        TernaryConditional(Expr condition, Token question, Expr thenBranch, Expr elseBranch, TokenType valueType) {
             super(valueType);
             this.condition = condition;
             this.question = question;
             this.thenBranch = thenBranch;
             this.elseBranch = elseBranch;
+            this.valueType = valueType;
         }
 
         @Override
@@ -165,12 +181,14 @@ abstract class Expr {
         final Expr callee;
         final Token paren;
         final List<Expr> arguments;
+        final TokenType valueType;
 
-        Call(Expr callee, Token paren, List<Expr> arguments, Token valueType) {
+        Call(Expr callee, Token paren, List<Expr> arguments, TokenType valueType) {
             super(valueType);
             this.callee = callee;
             this.paren = paren;
             this.arguments = arguments;
+            this.valueType = valueType;
         }
 
         @Override

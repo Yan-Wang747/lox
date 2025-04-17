@@ -8,16 +8,11 @@ import java.util.ArrayList;
 class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
     
     Environment globals = new Environment();
-    private Environment currentEnv = globals;
+    private Environment environment = globals;
 
     Interpreter() {
         // Define the global variables here
         globals.define(new Token(TokenType.IDENTIFIER, "clock", null, 0), new LoxCallable() {
-            @Override
-            public int arity() {
-                return 0;
-            }
-
             @Override
             public Object call(Interpreter interpreter, List<Object> arguments) {
                 return (double)System.currentTimeMillis() / 1000.0;
@@ -91,26 +86,26 @@ class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
 
     @Override
     public Void visit(Stmt.Block stmt) {
-        executeBlock(stmt.statements, new Environment(this.currentEnv));
+        executeBlock(stmt.statements, new Environment(this.environment));
         return null;
     }
 
     void executeBlock(List<Stmt> statements, Environment newEnvironment) {
-        Environment enclosing = this.currentEnv;
-        this.currentEnv = newEnvironment;
+        Environment enclosing = this.environment;
+        this.environment = newEnvironment;
         try {
             for (Stmt statement : statements) {
                 execute(statement);
             }
         } finally {
-            this.currentEnv = enclosing;
+            this.environment = enclosing;
         }
     }
 
     @Override
     public Void visit(Stmt.Assign stmt) {
         Object value = evaluate(stmt.value);
-        currentEnv.assign(stmt.name, value);
+        environment.assign(stmt.name, value);
         
         return null;
     }
@@ -119,7 +114,7 @@ class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
     public Void visit(Stmt.VarDecl stmt) {
         Object value = evaluate(stmt.initializer);
 
-        currentEnv.define(stmt.name, value);
+        environment.define(stmt.name, value);
         return null;
     }
 
@@ -144,12 +139,12 @@ class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
         // put the special variable break and contine to the env
         Token breakToken = new Token(TokenType.IDENTIFIER, "break", null, 0);
         Token continueToken = new Token(TokenType.IDENTIFIER, "continue", null, 0);
-        currentEnv.define(breakToken, false);
-        currentEnv.define(continueToken, false);
+        environment.define(breakToken, false);
+        environment.define(continueToken, false);
         
         while ((boolean)evaluate(stmt.condition)) {
             execute(stmt.body);
-            if ((boolean)currentEnv.get(breakToken) && !(boolean)currentEnv.get(continueToken))
+            if ((boolean)environment.get(breakToken) && !(boolean)environment.get(continueToken))
                 break;
 
             if (stmt.increment != null) {
@@ -168,8 +163,8 @@ class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
 
     @Override
     public Void visit(Stmt.Function stmt) {
-        LoxFunction function = new LoxFunction(stmt);
-        currentEnv.define(stmt.name, function);
+        LoxFunction function = new LoxFunction(stmt, environment);
+        environment.define(stmt.name, function);
         return null;
     }
 
@@ -191,7 +186,7 @@ class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
     public Object visit(Expr.Logical expr) {
         boolean left = (boolean) evaluate(expr.left);
 
-        if (expr.operator.isTokenType(TokenType.OR)) {
+        if (expr.operator.tokenType == TokenType.OR) {
             if (left) return left;
         } else {
             if (!left) return left;
@@ -236,16 +231,12 @@ class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
 
         LoxCallable function = (LoxCallable) callee;
 
-        if (arguments.size() != function.arity()) {
-            throw new RuntimeError(expr.paren, "Expected " + function.arity() + " arguments but got " + arguments.size() + ".");
-        }
-
         return function.call(this, arguments);
     }
 
     @Override
     public Object visit(Expr.Variable expr) {
-        return currentEnv.get(expr.name);
+        return environment.get(expr.name);
     }
 
     @Override

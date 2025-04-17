@@ -11,15 +11,15 @@ class GenerateAst {
         String outputDir = "lox";
 
         defineAst(outputDir, "Expr", Arrays.asList(
-            "List_      : List<Expr> items, Token valueType",
-            "Binary     : Expr left, Token operator, Expr right, Token valueType",
-            "Grouping   : Expr expression, Token valueType",
-            "Literal    : Object value, Token valueType",
-            "Logical    : Expr left, Token operator, Expr right, Token valueType",
-            "Variable   : Token name, Token valueType",
-            "Unary      : Token operator, Expr right, Token valueType",
-            "TernaryConditional : Expr condition, Token question, Expr thenBranch, Expr elseBranch, Token valueType",
-            "Call       : Expr callee, Token paren, List<Expr> arguments, Token valueType"
+            "List_      : List<Expr> items, TokenType valueType",
+            "Binary     : Expr left, Token operator, Expr right, TokenType valueType",
+            "Grouping   : Expr expression, TokenType valueType",
+            "Literal    : Object value, TokenType valueType",
+            "Logical    : Expr left, Token operator, Expr right, TokenType valueType",
+            "Variable   : Token name, TokenType valueType",
+            "Unary      : Token operator, Expr right, TokenType valueType",
+            "TernaryConditional : Expr condition, Token question, Expr thenBranch, Expr elseBranch, TokenType valueType",
+            "Call       : Expr callee, Token paren, List<Expr> arguments, TokenType valueType"
             ));
         
         defineAst(outputDir, "Stmt", Arrays.asList(
@@ -48,9 +48,9 @@ class GenerateAst {
         writer.println();
 
         if (baseName.equals("Expr")) {
-            writer.println("    final Token valueType;");
+            writer.println("    final TokenType valueType;");
             writer.println();
-            writer.println("    " + baseName + "(Token valueType) {"); // add the constructor
+            writer.println("    " + baseName + "(TokenType valueType) {"); // add the constructor
             writer.println("        this.valueType = valueType;");
             writer.println("    }");
             writer.println();
