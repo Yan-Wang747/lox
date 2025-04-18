@@ -80,7 +80,7 @@ class GenerateAst {
         // Fields
         String[] fields = fieldList.split(", ");
         for (String field : fields) {
-            if (field.equals("Token valueType")) continue;
+            if (field.equals("TokenType valueType")) continue;
             writer.println("        final " + field + ";");
         }
         writer.println();
@@ -93,7 +93,7 @@ class GenerateAst {
 
         // Store parameters in fields
         for (String field : fields) {
-            if (field.equals("Token valueType")) continue;
+            if (field.equals("TokenType valueType")) continue;
             String name = field.split(" ")[1];
             writer.println("            this." + name + " = " + name + ";");
         }

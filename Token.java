@@ -16,4 +16,15 @@ class Token {
     public String toString() {
         return tokenType + " " + lexeme + " " + literal;
     }
+
+    public boolean equals(Object obj) {
+        if (this == obj) return true;
+        if (!(obj instanceof Token)) return false;
+        Token other = (Token) obj;
+        if (this.literal != null)
+            return tokenType == other.tokenType && lexeme.equals(other.lexeme) && literal.equals(other.literal);
+        else{
+            return tokenType == other.tokenType && lexeme.equals(other.lexeme) && other.literal == null;
+        }
+    }
 }

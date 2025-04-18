@@ -1,5 +1,6 @@
 package lox;
 
+import java.util.Arrays;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -56,9 +57,9 @@ class Parser {
 
     private class FunDefTable {
         private final FunDefTable enclosing;
-        private final Map<String, List<Token>> fun_param_names = new HashMap<>();
-        private final Map<String, List<TokenType>> fun_param_types = new HashMap<>();
-        private final Map<String, TokenType> fun_return_type = new HashMap<>();
+        private final Map<String, Map<String, TokenType>> paramTypes = new HashMap<>();
+        private final Map<String, List<Token>> paramOrders = new HashMap<>();
+        private final Map<String, TokenType> returnTypes = new HashMap<>();
 
         FunDefTable() {
             this.enclosing = null;
@@ -68,41 +69,41 @@ class Parser {
             this.enclosing = enclosing;
         }
 
-        void add(String name, List<Token> param_names, List<TokenType> param_types, TokenType return_type) {
-            fun_param_names.put(name, param_names);
-            fun_param_types.put(name, param_types);
-            fun_return_type.put(name, return_type);
+        void add(String funName, Map<String, TokenType> funParamTypes, List<Token> paramOrder, TokenType returnType) {
+            paramTypes.put(funName, funParamTypes);
+            paramOrders.put(funName, paramOrder);
+            returnTypes.put(funName, returnType);
         }
 
-        List<Token> getParamNames(String name) {
-            if (fun_param_names.containsKey(name)) {
-                return fun_param_names.get(name);
+        Map<String, TokenType> getFunParamTypes(String funName) {
+            if (paramTypes.containsKey(funName)) {
+                return paramTypes.get(funName);
             }
 
             if (enclosing != null) 
-                return enclosing.getParamNames(name);
+                return enclosing.getFunParamTypes(funName);
 
             return null;
         }
 
-        List<TokenType> getParamTypes(String name) {
-            if (fun_param_types.containsKey(name)) {
-                return fun_param_types.get(name);
+        List<Token> getParamOrder(String funName) {
+            if (paramOrders.containsKey(funName)) {
+                return paramOrders.get(funName);
             }
 
             if (enclosing != null) 
-                return enclosing.getParamTypes(name);
+                return enclosing.getParamOrder(funName);
 
             return null;
         }
     
-        TokenType getReturnType(String name) {
-            if (fun_return_type.containsKey(name)) {
-                return fun_return_type.get(name);
+        TokenType getReturnType(String funName) {
+            if (returnTypes.containsKey(funName)) {
+                return returnTypes.get(funName);
             }
 
             if (enclosing != null) 
-                return enclosing.getReturnType(name);
+                return enclosing.getReturnType(funName);
 
             return null;
         }
@@ -175,22 +176,21 @@ class Parser {
     }
 
     private Stmt.Function function(String kind) {
-        Token name = consume(IDENTIFIER, "Expect " + kind + " name.");
+        Token funName = consume(IDENTIFIER, "Expect " + kind + " name.");
         match(EOS);
         consume(LEFT_PAREN, "Expect '(' after " + kind + " name.");
-        List<Token> param_names = new ArrayList<>();
-        List<TokenType> param_types = new ArrayList<>();
+        List<Token> paramTokens = new ArrayList<>();
+        Map<String, TokenType> funParamTypes = new HashMap<>();
         VariableTable functionScope = new VariableTable(this.variableTable);
         do {
             match(EOS); // skip empty lines
             if (check(RIGHT_PAREN)) break;
-            if (param_names.size() >= 255) {
+            if (funParamTypes.size() >= 255) {
                 error(peek(), "Cannot have more than 255 parameters.");
             }
             
             boolean isMutable = match(MUT);
-            Token param_name = consume(IDENTIFIER, "Expect parameter name.");
-            param_names.add(param_name);
+            Token paramName = consume(IDENTIFIER, "Expect parameter name.");
             consume(COLON, "Expect ':' after parameter name.");
 
             Token paramType = null;
@@ -199,35 +199,51 @@ class Parser {
             }
             else {
                 paramType = advance();
-                throw error(name, "Invalid type '" + paramType.lexeme + "'.");
+                throw error(funName, "Invalid type '" + paramType.lexeme + "'.");
             }
-            param_types.add(paramType.tokenType);
-            functionScope.add(param_name.lexeme, paramType.tokenType, isMutable);
+            paramTokens.add(paramName);
+            funParamTypes.put(paramName.lexeme, paramType.tokenType);
+            functionScope.add(paramName.lexeme, paramType.tokenType, isMutable);
 
         } while (match(COMMA));
 
         match(EOS); // skip empty lines
         consume(RIGHT_PAREN, "Expect ')' after parameters.");
 
-        TokenType returnType = NIL;
+        TokenType expectedRetType = NIL;
         if (match(COLON)) {
             if (match(NUM_TYPE, STR_TYPE, BOOL_TYPE)) {
-                returnType = previous().tokenType;
+                expectedRetType = previous().tokenType;
             }
             else {
-                returnType = advance().tokenType;
-                throw error(name, "Invalid type '" + returnType.name() + "'.");
+                expectedRetType = advance().tokenType;
+                throw error(funName, "Invalid type '" + expectedRetType.name() + "'.");
             }
         }
-        this.functionDefinitionTable.add(name.lexeme, param_names, param_types, returnType);
-        this.variableTable.add(name.lexeme, CALLABLE, false); // allow redeclaration of functions
+        this.functionDefinitionTable.add(funName.lexeme, funParamTypes, paramTokens, expectedRetType);
+        this.variableTable.add(funName.lexeme, CALLABLE, false); // allow redeclaration of functions
         
         match(EOS); // skip empty lines
 
         consume(LEFT_BRACE, "Expect '{' before " + kind + " body.");
-        List<Stmt> body = block(functionScope);
 
-        return new Stmt.Function(name, param_names, body);
+        FunDefTable newFunDefTable = new FunDefTable(this.functionDefinitionTable);
+        this.functionDefinitionTable = newFunDefTable;
+        try {
+            List<Stmt> body = block(functionScope);
+
+            TokenType retValueType = functionScope.getType("return");
+            if (retValueType == null) retValueType = NIL;
+            
+            if (retValueType != expectedRetType) {
+                error(funName, "Return value type '" + retValueType.name() + "' does not match expected type '" + expectedRetType.name() + "'.");
+            }
+
+            return new Stmt.Function(funName, paramTokens, body);
+        }
+        finally {
+            this.functionDefinitionTable = newFunDefTable.enclosing;
+        }
     }
 
     private Stmt varDeclaration(boolean isMutable) {
@@ -260,8 +276,26 @@ class Parser {
         }
         
         consume(EOS, "Expect '" + EOS + "' after variable/constant declaration.");
-        variableTable.add(name.lexeme, varType, isMutable); // allow redeclaration of variables
 
+        if (varType == CALLABLE) {
+            if (initializer instanceof Expr.Variable) {
+                Token funName = ((Expr.Variable) initializer).name;
+                Map<String, TokenType> paramTypes = functionDefinitionTable.getFunParamTypes(funName.lexeme);
+                if (paramTypes == null) {
+                    throw error(name, "Function '" + funName.lexeme + "' not defined.");
+                }
+                
+                List<Token> paramOrder = functionDefinitionTable.getParamOrder(funName.lexeme);
+                TokenType returnType = functionDefinitionTable.getReturnType(funName.lexeme);
+                
+                this.functionDefinitionTable.add(name.lexeme, paramTypes, paramOrder, returnType);
+            }
+            else {
+                throw error(name, "Callable expression other than variable is not supported.");
+            }
+        }
+        
+        variableTable.add(name.lexeme, varType, isMutable); // allow redeclaration of variables
         return new Stmt.VarDecl(name, initializer, isMutable);
     }
     
@@ -337,7 +371,6 @@ class Parser {
     }
     
     private List<Stmt> block(VariableTable newVarTable) {
-        VariableTable enclosing = this.variableTable;
         this.variableTable = newVarTable;
         try {
             consume(EOS, "Expect '" + EOS + "' after '{'.");
@@ -348,7 +381,7 @@ class Parser {
             return statements;
         }
         finally {
-            this.variableTable = enclosing;
+            this.variableTable = newVarTable.enclosing;
         }
     }
     
@@ -361,10 +394,12 @@ class Parser {
     private Stmt returnStatement() {
         Token keyword = previous();
         if (match(EOS)) {
+            this.variableTable.add("return", NIL, false); // used to check type after return
             return new Stmt.Return(keyword, null);
         }
         Expr value = expression();
         consume(EOS, "Expect '" + EOS + "' after return statement.");
+        this.variableTable.add("return", value.valueType, false);
 
         return new Stmt.Return(keyword, value);
     }
@@ -487,16 +522,17 @@ class Parser {
     }
     
     private Stmt assignmentStatement(Expr targetExpr) {
-        Token name = get_left_value(targetExpr);
+        Token targetName = get_left_value(targetExpr);
         Expr r_value = expression();
 
         if ((targetExpr.valueType != r_value.valueType) && r_value.valueType != NIL) {
-            error(name, "Requires both operands to be of the same type.");
+            error(targetName, "Requires both operands to be of the same type.");
         }
 
         consume(EOS, "Expect '" + EOS + "' after assignment.");
-        return new Stmt.Assign(name, r_value);
+        return new Stmt.Assign(targetName, r_value);
     }
+
 
     private Token get_left_value(Expr expr) {
         if (expr instanceof Expr.Variable) {
@@ -769,19 +805,74 @@ class Parser {
     }
 
     private Expr finishCall(Expr expr) {
-        List<Expr> arguments = new ArrayList<>();
+        if (expr.valueType != CALLABLE) {
+            throw error(previous(), "Only functions and classes can be called.");
+        }
+
+        if (expr instanceof Expr.Variable) {
+            return finishCallWithStaticType((Expr.Variable) expr);
+        }
+        else {
+            return finishCallWithDynamicType(expr);
+        }
+    }
+
+    private Expr.Call finishCallWithStaticType(Expr.Variable expr) {
+        Set<String> boundParams = new HashSet<>();
+        String funName = expr.name.lexeme;
+        Map<String, TokenType> funParamTypes = functionDefinitionTable.getFunParamTypes(funName);
         
+        if (funParamTypes == null) {
+            throw error(expr.name, "Undefined function '" + funName + "'.");
+        }
+
+        List<Token> paramOrder = functionDefinitionTable.getParamOrder(funName);
+        Expr[] arguments = new Expr[paramOrder.size()];
+
         do {
             match(EOS); // skip empty lines
             if (check(RIGHT_PAREN)) break;
-            if (arguments.size() >= 255) {
-                error(peek(), "Cannot have more than 255 arguments.");
+            Token paramName = consume(IDENTIFIER, "Invalid parameter.");
+            
+            if (boundParams.contains(paramName.lexeme)) {
+                throw error(paramName, "Duplicate parameter '" + paramName.lexeme + "'.");
             }
-            arguments.add(ternaryConditional()); // comma expression is not allowed
+            
+            TokenType paramType = funParamTypes.get(paramName.lexeme);
+            if (paramType == null) {
+                throw error(paramName, "Unknown parameter '" + paramName.lexeme + "'.");
+            }
+            
+            int paramIndex = paramOrder.indexOf(paramName);
+            consume(EQUAL, "Expect '=' after parameter name.");
+
+            Expr argument = ternaryConditional(); // comma expression is not allowed
+            if (argument.valueType != paramType) {
+                error(paramName, "Parameter and argument expression have different types.");
+            }
+
+            arguments[paramIndex] = argument; 
+            boundParams.add(paramName.lexeme);
         } while (match(COMMA));
 
         Token paren = consume(RIGHT_PAREN, "Expect ')' after arguments.");
-        return new Expr.Call(expr, paren, arguments, expr.valueType);
+        return new Expr.Call(expr, paren, Arrays.asList(arguments), expr.valueType);
+    }
+
+    private Expr.Call finishCallWithDynamicType(Expr expr) {
+        List<Expr> arguments = new ArrayList<>();
+        Token paren = null;
+
+        do {
+            match(EOS); // skip empty lines
+            if (check(RIGHT_PAREN)) break;
+
+            Expr argument = ternaryConditional(); // comma expression is not allowed
+            arguments.add(argument);
+        } while (match(COMMA));
+
+        paren = consume(RIGHT_PAREN, "Expect ')' after arguments.");
+        return new Expr.Call(expr, paren, arguments, NIL); // dynamic type, unknow at compile time
     }
 
     private Expr primary() {
