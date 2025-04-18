@@ -59,7 +59,7 @@ class Parser {
         private final FunDefTable enclosing;
         private final Map<String, Map<String, TokenType>> paramTypes = new HashMap<>();
         private final Map<String, List<Token>> paramOrders = new HashMap<>();
-        private final Map<String, TokenType> returnTypes = new HashMap<>();
+        private final Map<String, TokenType> expectedRetTypes = new HashMap<>();
 
         FunDefTable() {
             this.enclosing = null;
@@ -69,10 +69,10 @@ class Parser {
             this.enclosing = enclosing;
         }
 
-        void add(String funName, Map<String, TokenType> funParamTypes, List<Token> paramOrder, TokenType returnType) {
+        void add(String funName, Map<String, TokenType> funParamTypes, List<Token> paramOrder, TokenType expectedRetType) {
             paramTypes.put(funName, funParamTypes);
             paramOrders.put(funName, paramOrder);
-            returnTypes.put(funName, returnType);
+            expectedRetTypes.put(funName, expectedRetType);
         }
 
         Map<String, TokenType> getFunParamTypes(String funName) {
@@ -97,13 +97,13 @@ class Parser {
             return null;
         }
     
-        TokenType getReturnType(String funName) {
-            if (returnTypes.containsKey(funName)) {
-                return returnTypes.get(funName);
+        TokenType getExpectedRetType(String funName) {
+            if (expectedRetTypes.containsKey(funName)) {
+                return expectedRetTypes.get(funName);
             }
 
             if (enclosing != null) 
-                return enclosing.getReturnType(funName);
+                return enclosing.getExpectedRetType(funName);
 
             return null;
         }
@@ -234,7 +234,7 @@ class Parser {
 
             TokenType retValueType = functionScope.getType("return");
             if (retValueType == null) retValueType = NIL;
-            
+
             if (retValueType != expectedRetType) {
                 error(funName, "Return value type '" + retValueType.name() + "' does not match expected type '" + expectedRetType.name() + "'.");
             }
@@ -286,9 +286,9 @@ class Parser {
                 }
                 
                 List<Token> paramOrder = functionDefinitionTable.getParamOrder(funName.lexeme);
-                TokenType returnType = functionDefinitionTable.getReturnType(funName.lexeme);
+                TokenType expectedRetType = functionDefinitionTable.getExpectedRetType(funName.lexeme);
                 
-                this.functionDefinitionTable.add(name.lexeme, paramTypes, paramOrder, returnType);
+                this.functionDefinitionTable.add(name.lexeme, paramTypes, paramOrder, expectedRetType);
             }
             else {
                 throw error(name, "Callable expression other than variable is not supported.");
