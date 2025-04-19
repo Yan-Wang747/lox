@@ -86,7 +86,7 @@ class Parser {
                     hasLoopTermination = false;
 
                     current--; // recover the last EOS token for the next then block
-                    Stmt.Block thenBranch = new Stmt.Block(block(new VariableTable(this.variableTable)));
+                    Stmt.Block thenBranch = new Stmt.Block(block(new VariableTable(this.variableTable), true));
                     current -= 2; // recover the last } EOS tokens for the current block
 
                     if (!thenBranch.statements.isEmpty()) {
@@ -114,8 +114,13 @@ class Parser {
     }
 
     private Stmt declaration() {
-        if (match(FUN) && check(IDENTIFIER) ) {
-            return function("function");
+        if (match(FUN)) {
+            if (check(IDENTIFIER)) {
+                return function("function");
+            }
+            else {
+                current--; // recover the last FUN token
+            }
         }
 
         if (match(VAR)) {
@@ -176,7 +181,7 @@ class Parser {
         }
 
         if (match(LEFT_BRACE)) {
-            return new Stmt.Block(block(new VariableTable(this.variableTable)));
+            return new Stmt.Block(block(new VariableTable(this.variableTable), true));
         }
 
         if (match(PRINT)) {
@@ -223,7 +228,7 @@ class Parser {
         match(EOS); // skip empty lines
         consume(LEFT_BRACE, "Expect '{' after condition.");
 
-        Stmt thenBranch = new Stmt.Block(block(new VariableTable(this.variableTable)));
+        Stmt thenBranch = new Stmt.Block(block(new VariableTable(this.variableTable), true));
         Stmt elseBranch = null;
         if (match(ELSE)) {
             match(EOS); // skip empty lines
@@ -233,21 +238,24 @@ class Parser {
             }
             else {
                 consume(LEFT_BRACE, "Expect '{' after 'else'.");
-                elseBranch = new Stmt.Block(block(new VariableTable(this.variableTable)));
+                elseBranch = new Stmt.Block(block(new VariableTable(this.variableTable), true));
             }
         }
 
         return new Stmt.If(condition, thenBranch, elseBranch);
     }
     
-    private List<Stmt> block(VariableTable newVarTable) {
+    private List<Stmt> block(VariableTable newVarTable, boolean consumeEOS) {
         this.variableTable = newVarTable;
         try {
-            consume(EOS, "Expect '" + EOS + "' after '{'.");
+            match(EOS); // skip empty lines
 
             List<Stmt> statements = parse();
             consume(RIGHT_BRACE, "Expect '}' after block.");
-            consume(EOS, "Expect '" + EOS + "' after '}'.");
+            if (consumeEOS) {
+                consume(EOS, "Expect '" + EOS + "' after block.");
+            }
+            
             return statements;
         }
         finally {
@@ -319,7 +327,7 @@ class Parser {
         newVarTable.add("continue", BOOL_TYPE, true);
         newVarTable.add("break", BOOL_TYPE, true);
         
-        Stmt body = new Stmt.Block(block(newVarTable));
+        Stmt body = new Stmt.Block(block(newVarTable, true));
 
         hasLoopTermination = false; // reset at the end of each loop
         return new Stmt.While(condition, body, null);
@@ -375,7 +383,7 @@ class Parser {
             newVarTable.add("continue", BOOL_TYPE, true);
             newVarTable.add("break", BOOL_TYPE, true);
 
-            Stmt body = new Stmt.Block(block(newVarTable));
+            Stmt body = new Stmt.Block(block(newVarTable, true));
 
             if (condition == null) 
                 condition = new Expr.Literal(true, BOOL_TYPE);
@@ -476,7 +484,7 @@ class Parser {
 
         consume(LEFT_BRACE, "Expect '{'");
 
-        List<Stmt> body = block(functionScope);
+        List<Stmt> body = block(functionScope, false);
 
         return new Expr.Lambda(paramTokens, body, expectedRetType);
     }
