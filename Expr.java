@@ -19,6 +19,7 @@ abstract class Expr {
         R visit(Unary expr);
         R visit(TernaryConditional expr);
         R visit(Call expr);
+        R visit(Lambda expr);
     }
 
     abstract <R> R accept(Visitor<R> visitor);
@@ -151,6 +152,23 @@ abstract class Expr {
             this.callee = callee;
             this.paren = paren;
             this.arguments = arguments;
+        }
+
+        @Override
+        <R> R accept(Visitor<R> visitor) {
+            return visitor.visit(this);
+        }
+    }
+
+    static class Lambda extends Expr {
+
+        final List<Token> params;
+        final List<Stmt> body;
+
+        Lambda(List<Token> params, List<Stmt> body, TokenType valueType) {
+            super(valueType);
+            this.params = params;
+            this.body = body;
         }
 
         @Override

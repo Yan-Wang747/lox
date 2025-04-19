@@ -18,7 +18,8 @@ class GenerateAst {
             "Variable   : Token name, TokenType valueType",
             "Unary      : Token operator, Expr right, TokenType valueType",
             "TernaryConditional : Expr condition, Token question, Expr thenBranch, Expr elseBranch, TokenType valueType",
-            "Call       : Expr callee, Token paren, List<Expr> arguments, TokenType valueType"
+            "Call       : Expr callee, Token paren, List<Expr> arguments, TokenType valueType",
+            "Lambda     : List<Token> params, List<Stmt> body, TokenType valueType"
             ));
         
         defineAst(outputDir, "Stmt", Arrays.asList(
@@ -26,7 +27,7 @@ class GenerateAst {
             "Block      : List<Stmt> statements",
             "Assign     : Token name, Expr value",
             "Expression : Expr expression",
-            "Function   : Token name, List<Token> params, List<Stmt> body",
+            "Function   : Token name, Expr.Lambda lambda",
             "Print      : Expr expression",
             "Return     : Token keyword, Expr value",
             "While      : Expr condition, Stmt body, Stmt increment",

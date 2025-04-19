@@ -114,7 +114,7 @@ class Parser {
     }
 
     private Stmt declaration() {
-        if (match(FUN)) {
+        if (match(FUN) && check(IDENTIFIER) ) {
             return function("function");
         }
 
@@ -128,61 +128,11 @@ class Parser {
     private Stmt.Function function(String kind) {
         Token funName = consume(IDENTIFIER, "Expect " + kind + " name.");
         match(EOS);
-        consume(LEFT_PAREN, "Expect '(' after " + kind + " name.");
-        List<Token> paramTokens = new ArrayList<>();
-        VariableTable functionScope = new VariableTable(this.variableTable);
-        do {
-            match(EOS); // skip empty lines
-            if (check(RIGHT_PAREN)) break;
-            if (paramTokens.size() >= 255) {
-                error(peek(), "Cannot have more than 255 parameters.");
-            }
-            
-            boolean isMutable = match(MUT);
-            Token paramName = consume(IDENTIFIER, "Expect parameter name.");
-            consume(COLON, "Expect ':' after parameter name.");
 
-            Token paramType = null;
-            if (match(NUM_TYPE, STR_TYPE, BOOL_TYPE)) {
-                paramType = previous();
-            }
-            else {
-                paramType = advance();
-                throw error(funName, "Invalid type '" + paramType.lexeme + "'.");
-            }
-            paramTokens.add(paramName);
-            functionScope.add(paramName.lexeme, paramType.tokenType, isMutable);
-        } while (match(COMMA));
-
-        match(EOS); // skip empty lines
-        consume(RIGHT_PAREN, "Expect ')' after parameters.");
-
-        TokenType expectedRetType = NIL;
-        if (match(COLON)) {
-            if (match(NUM_TYPE, STR_TYPE, BOOL_TYPE, CALLABLE)) {
-                expectedRetType = previous().tokenType;
-            }
-            else {
-                expectedRetType = advance().tokenType;
-                throw error(funName, "Invalid type '" + expectedRetType.name() + "'.");
-            }
-        }
+        // bind lambda to the function name
+        Expr.Lambda lambda = lambda();
         this.variableTable.add(funName.lexeme, CALLABLE, false); // allow redeclaration of functions
-        
-        match(EOS); // skip empty lines
-
-        consume(LEFT_BRACE, "Expect '{' before " + kind + " body.");
-
-        List<Stmt> body = block(functionScope);
-
-        TokenType retValueType = functionScope.getType("return");
-        if (retValueType == null) retValueType = NIL;
-
-        if (retValueType != expectedRetType) {
-            error(funName, "Return value type '" + retValueType.name() + "' does not match expected type '" + expectedRetType.name() + "'.");
-        }
-
-        return new Stmt.Function(funName, paramTokens, body);
+        return new Stmt.Function(funName, lambda);
     }
 
     private Stmt varDeclaration(boolean isMutable) {
@@ -193,8 +143,7 @@ class Parser {
                 varType = previous().tokenType;
             }
             else {
-                varType = advance().tokenType;
-                throw error(name, "Invalid type '" + varType.name() + "'.");
+                throw error(peek(), "Invalid type '" + peek().lexeme + "'.");
             }
         }
 
@@ -396,7 +345,8 @@ class Parser {
                 Expr targetExpr = expression();
                 initializer = assignmentStatement(targetExpr);
             }
-            this.EOS = TokenType.NL; // reset EOS to NL
+
+            match(NL); // skip empty lines
 
             Expr condition = null;
             if (!check(EOS)) {
@@ -405,13 +355,20 @@ class Parser {
                     error(previous(), "Requires bool condition.");
                 }
             }
-            consume(SEMICOLON, "Expect ';' after loop condition.");
+            consume(EOS, "Expect ';' after loop condition.");
+
+            match(NL); // skip empty lines
 
             Stmt increment = null;
             if (!check(EOS)) {
                 increment = statement();
             }
+
+            match(NL); // skip empty lines
+
             consume(LEFT_BRACE, "Expect '{' after increment.");
+
+            this.EOS = TokenType.NL; // reset EOS to NL
             
             // create special 'continue' and 'break' variables
             VariableTable newVarTable = new VariableTable(this.variableTable);
@@ -454,7 +411,6 @@ class Parser {
         return new Stmt.Assign(targetName, r_value);
     }
 
-
     private Token get_left_value(Expr expr) {
         if (expr instanceof Expr.Variable) {
             Expr.Variable varExpr = (Expr.Variable)expr;
@@ -476,6 +432,53 @@ class Parser {
     private Stmt expressionStatement(Expr expr) {
         consume(EOS, "Expect '" + EOS + "' after expression.");
         return new Stmt.Expression(expr);
+    }
+
+    private Expr.Lambda lambda() {
+        consume(LEFT_PAREN, "Expect '(' after 'fun'.");
+        List<Token> paramTokens = new ArrayList<>();
+        VariableTable functionScope = new VariableTable(this.variableTable);
+        do {
+            match(EOS); // skip empty lines
+            if (check(RIGHT_PAREN)) break;
+            if (paramTokens.size() >= 255) {
+                error(peek(), "Cannot have more than 255 parameters.");
+            }
+            
+            boolean isMutable = match(MUT);
+            Token paramName = consume(IDENTIFIER, "Expect parameter name.");
+            consume(COLON, "Expect ':' after parameter name.");
+
+            Token paramType = null;
+            if (match(NUM_TYPE, STR_TYPE, BOOL_TYPE, CALLABLE)) {
+                paramType = previous();
+            }
+            else {
+                throw error(peek(), "Invalid type '" + peek().lexeme + "'.");
+            }
+            paramTokens.add(paramName);
+            functionScope.add(paramName.lexeme, paramType.tokenType, isMutable);
+        } while (match(COMMA));
+
+        match(EOS); // skip empty lines
+        consume(RIGHT_PAREN, "Expect ')' after parameters.");
+
+        TokenType expectedRetType = NIL;
+        if (match(COLON)) {
+            if (match(NUM_TYPE, STR_TYPE, BOOL_TYPE, CALLABLE)) {
+                expectedRetType = previous().tokenType;
+            }
+            else {
+                throw error(peek(), "Invalid type '" + peek().lexeme + "'.");
+            }
+        }
+        match(EOS); // skip empty lines
+
+        consume(LEFT_BRACE, "Expect '{'");
+
+        List<Stmt> body = block(functionScope);
+
+        return new Expr.Lambda(paramTokens, body, expectedRetType);
     }
 
     private Expr expression() {
@@ -789,6 +792,10 @@ class Parser {
             return new Expr.Variable(id, id_type);
         }
 
+        if (match(FUN)) {
+            return lambda();
+        }
+        
         throw error(peek(), "Expect expression.");
     }
 

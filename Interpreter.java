@@ -174,6 +174,11 @@ class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
     }
 
     @Override
+    public LoxCallable visit(Expr.Lambda expr) {
+        return new LoxLambda(expr, environment);
+    }
+
+    @Override
     public Object visit(Expr.List_ expr) {
         List<Object> values = new ArrayList<>();
         for (Expr item : expr.items) {

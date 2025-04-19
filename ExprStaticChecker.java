@@ -130,4 +130,9 @@ class ExprStaticChecker implements Expr.Visitor<ParseError> {
     public ParseError visit(Expr.Variable expr) {
         return null;
     }
+
+    @Override
+    public ParseError visit(Expr.Lambda expr) {
+        return null;
+    }
 }
