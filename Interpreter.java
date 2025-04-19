@@ -14,6 +14,11 @@ class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
         // Define the global variables here
         globals.define(new Token(TokenType.IDENTIFIER, "clock", null, 0), new LoxCallable() {
             @Override
+            public int arity() {
+                return 0;
+            }
+            
+            @Override
             public Object call(Interpreter interpreter, List<Object> arguments) {
                 return (double)System.currentTimeMillis() / 1000.0;
             }
@@ -183,19 +188,6 @@ class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
     }
 
     @Override
-    public Object visit(Expr.Logical expr) {
-        boolean left = (boolean) evaluate(expr.left);
-
-        if (expr.operator.tokenType == TokenType.OR) {
-            if (left) return left;
-        } else {
-            if (!left) return left;
-        }
-
-        return evaluate(expr.right);
-    }
-
-    @Override
     public Object visit(Expr.Grouping expr) {
         return evaluate(expr.expression);
     }
@@ -230,6 +222,10 @@ class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
         }
 
         LoxCallable function = (LoxCallable) callee;
+
+        if (arguments.size() != function.arity()) {
+            throw new RuntimeError(expr.paren, "Expected " + function.arity() + " arguments but got " + arguments.size() + ".");
+        }
 
         return function.call(this, arguments);
     }
@@ -296,6 +292,16 @@ class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
                 return isEqual(left, right);
             case COMMA:
                 return right;
+            case OR: case AND:
+                boolean isLeftTrue = (boolean) evaluate(expr.left);
+
+                if (expr.operator.tokenType == TokenType.OR) {
+                    if (isLeftTrue) return left;
+                } else {
+                    if (!isLeftTrue) return left;
+                }
+        
+                return evaluate(expr.right);
             default:
                 throw new RuntimeError(expr.operator, "Unknown binary operator.");
         }

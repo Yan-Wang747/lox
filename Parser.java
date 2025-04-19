@@ -1,6 +1,5 @@
 package lox;
 
-import java.util.Arrays;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -11,6 +10,13 @@ import java.util.Set;
 import static lox.TokenType.*;
 
 class Parser {
+
+    public static class ParseError extends RuntimeException {
+        public ParseError() {}
+        public ParseError(String message) {
+            super(message);
+        }
+    }
 
     private class VariableTable {
 
@@ -55,65 +61,9 @@ class Parser {
         }
     }
 
-    private class FunDefTable {
-        private final FunDefTable enclosing;
-        private final Map<String, Map<String, TokenType>> paramTypes = new HashMap<>();
-        private final Map<String, List<Token>> paramOrders = new HashMap<>();
-        private final Map<String, TokenType> expectedRetTypes = new HashMap<>();
-
-        FunDefTable() {
-            this.enclosing = null;
-        }
-
-        FunDefTable(FunDefTable enclosing) {
-            this.enclosing = enclosing;
-        }
-
-        void add(String funName, Map<String, TokenType> funParamTypes, List<Token> paramOrder, TokenType expectedRetType) {
-            paramTypes.put(funName, funParamTypes);
-            paramOrders.put(funName, paramOrder);
-            expectedRetTypes.put(funName, expectedRetType);
-        }
-
-        Map<String, TokenType> getFunParamTypes(String funName) {
-            if (paramTypes.containsKey(funName)) {
-                return paramTypes.get(funName);
-            }
-
-            if (enclosing != null) 
-                return enclosing.getFunParamTypes(funName);
-
-            return null;
-        }
-
-        List<Token> getParamOrder(String funName) {
-            if (paramOrders.containsKey(funName)) {
-                return paramOrders.get(funName);
-            }
-
-            if (enclosing != null) 
-                return enclosing.getParamOrder(funName);
-
-            return null;
-        }
-    
-        TokenType getExpectedRetType(String funName) {
-            if (expectedRetTypes.containsKey(funName)) {
-                return expectedRetTypes.get(funName);
-            }
-
-            if (enclosing != null) 
-                return enclosing.getExpectedRetType(funName);
-
-            return null;
-        }
-    }
-
     private boolean hasLoopTermination = false;
     private VariableTable variableTable = new VariableTable();
-    private FunDefTable functionDefinitionTable = new FunDefTable();
-    private static class ParseError extends RuntimeException {}
-
+    private final ExprStaticChecker staticChecker = new ExprStaticChecker();
     private final List<Token> tokens;
     private int current = 0;
     private TokenType EOS = TokenType.NL;
@@ -180,12 +130,11 @@ class Parser {
         match(EOS);
         consume(LEFT_PAREN, "Expect '(' after " + kind + " name.");
         List<Token> paramTokens = new ArrayList<>();
-        Map<String, TokenType> funParamTypes = new HashMap<>();
         VariableTable functionScope = new VariableTable(this.variableTable);
         do {
             match(EOS); // skip empty lines
             if (check(RIGHT_PAREN)) break;
-            if (funParamTypes.size() >= 255) {
+            if (paramTokens.size() >= 255) {
                 error(peek(), "Cannot have more than 255 parameters.");
             }
             
@@ -202,9 +151,7 @@ class Parser {
                 throw error(funName, "Invalid type '" + paramType.lexeme + "'.");
             }
             paramTokens.add(paramName);
-            funParamTypes.put(paramName.lexeme, paramType.tokenType);
             functionScope.add(paramName.lexeme, paramType.tokenType, isMutable);
-
         } while (match(COMMA));
 
         match(EOS); // skip empty lines
@@ -212,7 +159,7 @@ class Parser {
 
         TokenType expectedRetType = NIL;
         if (match(COLON)) {
-            if (match(NUM_TYPE, STR_TYPE, BOOL_TYPE)) {
+            if (match(NUM_TYPE, STR_TYPE, BOOL_TYPE, CALLABLE)) {
                 expectedRetType = previous().tokenType;
             }
             else {
@@ -220,30 +167,22 @@ class Parser {
                 throw error(funName, "Invalid type '" + expectedRetType.name() + "'.");
             }
         }
-        this.functionDefinitionTable.add(funName.lexeme, funParamTypes, paramTokens, expectedRetType);
         this.variableTable.add(funName.lexeme, CALLABLE, false); // allow redeclaration of functions
         
         match(EOS); // skip empty lines
 
         consume(LEFT_BRACE, "Expect '{' before " + kind + " body.");
 
-        FunDefTable newFunDefTable = new FunDefTable(this.functionDefinitionTable);
-        this.functionDefinitionTable = newFunDefTable;
-        try {
-            List<Stmt> body = block(functionScope);
+        List<Stmt> body = block(functionScope);
 
-            TokenType retValueType = functionScope.getType("return");
-            if (retValueType == null) retValueType = NIL;
+        TokenType retValueType = functionScope.getType("return");
+        if (retValueType == null) retValueType = NIL;
 
-            if (retValueType != expectedRetType) {
-                error(funName, "Return value type '" + retValueType.name() + "' does not match expected type '" + expectedRetType.name() + "'.");
-            }
-
-            return new Stmt.Function(funName, paramTokens, body);
+        if (retValueType != expectedRetType) {
+            error(funName, "Return value type '" + retValueType.name() + "' does not match expected type '" + expectedRetType.name() + "'.");
         }
-        finally {
-            this.functionDefinitionTable = newFunDefTable.enclosing;
-        }
+
+        return new Stmt.Function(funName, paramTokens, body);
     }
 
     private Stmt varDeclaration(boolean isMutable) {
@@ -276,24 +215,6 @@ class Parser {
         }
         
         consume(EOS, "Expect '" + EOS + "' after variable/constant declaration.");
-
-        if (varType == CALLABLE) {
-            if (initializer instanceof Expr.Variable) {
-                Token funName = ((Expr.Variable) initializer).name;
-                Map<String, TokenType> paramTypes = functionDefinitionTable.getFunParamTypes(funName.lexeme);
-                if (paramTypes == null) {
-                    throw error(name, "Function '" + funName.lexeme + "' not defined.");
-                }
-                
-                List<Token> paramOrder = functionDefinitionTable.getParamOrder(funName.lexeme);
-                TokenType expectedRetType = functionDefinitionTable.getExpectedRetType(funName.lexeme);
-                
-                this.functionDefinitionTable.add(name.lexeme, paramTypes, paramOrder, expectedRetType);
-            }
-            else {
-                throw error(name, "Callable expression other than variable is not supported.");
-            }
-        }
         
         variableTable.add(name.lexeme, varType, isMutable); // allow redeclaration of variables
         return new Stmt.VarDecl(name, initializer, isMutable);
@@ -407,7 +328,7 @@ class Parser {
     private Stmt breakStatement(boolean isContinue) {
         consume(EOS, "Expect '" + EOS + "' after " + previous().lexeme + " statement.");
         // skip following statements
-        while (!isAtEnd() && !check(RIGHT_BRACE)) {
+        while (!check(RIGHT_BRACE)) {
             advance();
         }
 
@@ -574,14 +495,16 @@ class Parser {
 
         while (match(COMMA)) {
             Token operator = previous();
-            while (match(EOS)); // skip empty lines
+            match(EOS); // skip empty lines
             Expr right = ternaryConditional();
-
-            if (expr.valueType != right.valueType) {
-                throw error(operator, "Requires both operands to be of the same type.");
-            }
-
             expr = new Expr.Binary(expr, operator, right, expr.valueType); 
+            
+            ParseError err = staticChecker.check(expr);
+            if (err != null) {
+                assert err instanceof ExprStaticChecker.DifferentTypeError;
+                // if got wrong type, expr value type will be invalid, panic
+                throw error(operator, err.getMessage());
+            }
         }
 
         return expr;
@@ -592,22 +515,27 @@ class Parser {
 
         if (match(QUESTION)) {
             Token operator = previous();
-            while (match(EOS)); // skip empty lines
-            
-            if (expr.valueType != BOOL_TYPE) {
-                error(operator, "Requires bool condition.");
-            }
-
+            match(EOS); // skip empty lines
             Expr thenBranch = ternaryConditional();
             consume(COLON, "Expect ':' after then branch");
-            while (match(EOS)); // skip empty lines
+            match(EOS); // skip empty lines
             Expr elseBranch = ternaryConditional();
-
-            if (thenBranch.valueType != elseBranch.valueType) {
-                throw error(operator, "Requires both branches to be of the same type.");
+            expr = new Expr.TernaryConditional(expr, operator, thenBranch, elseBranch, thenBranch.valueType);
+            
+            ParseError err = staticChecker.check(expr);
+            if (err != null) {
+                if (err instanceof ExprStaticChecker.TypeError) {
+                    // don't panic for condition expr type error, still in a valid state
+                    error(operator, err.getMessage());
+                }
+                else if (err instanceof ExprStaticChecker.DifferentTypeError) {
+                    // if got wrong type, expr value type will be invalid, panic
+                    throw error(operator, err.getMessage());
+                }
+                else {
+                    throw new RuntimeException("Unknown checker error type: " + err.getClass().getName());
+                }
             }
-
-            expr = new Expr.TernaryConditional(expr, operator, thenBranch, elseBranch, thenBranch.valueType); 
         }
 
         return expr;
@@ -619,12 +547,14 @@ class Parser {
         while (match(OR)) {
             Token operator = previous();
             Expr right = and();
-            
-            if ((expr.valueType != BOOL_TYPE) || (right.valueType != BOOL_TYPE)) {
-                error(operator, "Requires both operands to be of the bool type.");
-            }
+            expr = new Expr.Binary(expr, operator, right, BOOL_TYPE);
 
-            expr = new Expr.Logical(expr, operator, right, BOOL_TYPE);
+            ParseError err = staticChecker.check(expr);
+            if (err != null) {
+                assert err instanceof ExprStaticChecker.TypeError;
+                // don't panic for type error, still in a valid state, always bool type
+                error(operator, err.getMessage());
+            }
         }
 
         return expr;
@@ -636,12 +566,14 @@ class Parser {
         while (match(AND)) {
             Token operator = previous();
             Expr right = equality();
-
-            if ((expr.valueType != BOOL_TYPE) || (right.valueType != BOOL_TYPE)) {
-                error(operator, "Requires both operands to be of the bool type.");
-            }
-
-            expr = new Expr.Logical(expr, operator, right, BOOL_TYPE);
+            expr = new Expr.Binary(expr, operator, right, BOOL_TYPE);
+        
+            ParseError err = staticChecker.check(expr);
+            if (err != null) {
+                assert err instanceof ExprStaticChecker.TypeError;
+                // don't panic for type error, still in a valid state, always bool type
+                error(operator, err.getMessage());
+            } 
         }
 
         return expr;
@@ -661,15 +593,15 @@ class Parser {
         while (match(BANG_EQUAL, EQUAL_EQUAL)) {
             Token operator = previous();
             Expr right = comparison();
-
-            if (expr.valueType != right.valueType) {
-                error(operator, "Requires both operands to be of the same type.");
-            }
-            if ((expr.valueType != NUM_TYPE) && (expr.valueType != BOOL_TYPE)) {
-                error(operator, "does not support " + expr.valueType.name());
-            }
-
             expr = new Expr.Binary(expr, operator, right, BOOL_TYPE);
+        
+            ParseError err = staticChecker.check(expr);
+            if (err != null) {
+                assert (err instanceof ExprStaticChecker.DifferentTypeError) ||
+                       (err instanceof ExprStaticChecker.TypeError);
+                // don't panic, still in a valid state, always bool type
+                error(operator, err.getMessage()); 
+            }
         }
 
         return expr;
@@ -689,15 +621,15 @@ class Parser {
         while (match(GREATER, GREATER_EQUAL, LESS, LESS_EQUAL)) {
             Token operator = previous();
             Expr right = term();
-
-            if (expr.valueType != right.valueType) {
-                error(operator, "Requires both operands to be of the same type.");
-            }
-            if ((expr.valueType != NUM_TYPE) && (expr.valueType != STR_TYPE)) {
-                error(operator, "does not support " + expr.valueType.name());
-            }
-
             expr = new Expr.Binary(expr, operator, right, BOOL_TYPE);
+        
+            ParseError err = staticChecker.check(expr);
+            if (err != null) {
+                assert (err instanceof ExprStaticChecker.DifferentTypeError) ||
+                       (err instanceof ExprStaticChecker.TypeError);
+                // don't panic, still in a valid state, always bool type
+                error(operator, err.getMessage()); 
+            }
         }
 
         return expr;
@@ -717,20 +649,15 @@ class Parser {
         while (match(MINUS, PLUS)) {
             Token operator = previous();
             Expr right = factor();
-
-            if (expr.valueType != right.valueType) {
-                throw error(operator, "Requires both operands to be of the same type.");
-            }
-            if (operator.tokenType == PLUS)
-                if ((expr.valueType != NUM_TYPE) && 
-                    expr.valueType != STR_TYPE) {
-                    throw error(operator, "does not support " + expr.valueType.name());
-                }
-            if ((operator.tokenType == MINUS) && expr.valueType != NUM_TYPE) {
-                throw error(operator, "does not support " + expr.valueType.name());
-            }
-            
             expr = new Expr.Binary(expr, operator, right, expr.valueType);
+
+            ParseError err = staticChecker.check(expr);
+            if (err != null) {
+                assert (err instanceof ExprStaticChecker.DifferentTypeError) ||
+                       (err instanceof ExprStaticChecker.TypeError);
+                // if got wrong type, expr value type will be invalid, panic
+                throw error(operator, err.getMessage()); 
+            }
         }
 
         return expr;
@@ -750,22 +677,15 @@ class Parser {
         while (match(SLASH, STAR)) {
             Token operator = previous();
             Expr right = unary();
-
-            
-            if (right.valueType != NUM_TYPE) {
-                throw error(operator, "does not support " + expr.valueType.name() + ", " + right.valueType.name());
+            expr = new Expr.Binary(expr, operator, right, NUM_TYPE);
+        
+            ParseError err = staticChecker.check(expr);
+            if (err != null) {
+                assert (err instanceof ExprStaticChecker.DifferentTypeError) ||
+                       (err instanceof ExprStaticChecker.TypeError);
+                // don't panic, still in a valid state, always num type
+                error(operator, err.getMessage()); 
             }
-            if (operator.tokenType == STAR)
-                if ((expr.valueType != NUM_TYPE) &&
-                    (expr.valueType != STR_TYPE)) {
-                    throw error(operator, "does not support " + expr.valueType.name() + ", " + right.valueType.name());
-                }
-            if (operator.tokenType == SLASH)
-                if (expr.valueType != NUM_TYPE) {
-                    throw error(operator, "does not support " + expr.valueType.name() + ", " + right.valueType.name());
-                }
-
-            expr = new Expr.Binary(expr, operator, right, expr.valueType);
         }
 
         return expr;
@@ -775,15 +695,27 @@ class Parser {
         if (match(BANG, MINUS)) {
             Token operator = previous();
             Expr right = unary();
-
-            if ((operator.tokenType == MINUS) && (right.valueType != NUM_TYPE)) {
-                throw error(operator, "does not support " + right.valueType.name());
+            
+            Expr.Unary expr = null;
+            if (operator.tokenType == MINUS) {
+                expr = new Expr.Unary(operator, right, NUM_TYPE);
             }
-            if ((operator.tokenType == BANG) && (right.valueType != BOOL_TYPE)) {
-                throw error(operator, "does not support " + right.valueType.name());
+            else if (operator.tokenType == BANG) {
+                expr = new Expr.Unary(operator, right, BOOL_TYPE);
+            }
+            else {
+                throw new RuntimeException("Invalid unary operator.");
+            }
+                
+        
+            ParseError err = staticChecker.check(expr);
+            if (err != null) {
+                assert err instanceof ExprStaticChecker.TypeError;
+                // don't panic, still in a valid state
+                error(operator, err.getMessage()); 
             }
 
-            return new Expr.Unary(operator, right, right.valueType);
+            return expr;
         }
 
         return call();
@@ -805,61 +737,6 @@ class Parser {
     }
 
     private Expr finishCall(Expr expr) {
-        if (expr.valueType != CALLABLE) {
-            throw error(previous(), "Only functions and classes can be called.");
-        }
-
-        if (expr instanceof Expr.Variable) {
-            return finishCallWithStaticType((Expr.Variable) expr);
-        }
-        else {
-            return finishCallWithDynamicType(expr);
-        }
-    }
-
-    private Expr.Call finishCallWithStaticType(Expr.Variable expr) {
-        Set<String> boundParams = new HashSet<>();
-        String funName = expr.name.lexeme;
-        Map<String, TokenType> funParamTypes = functionDefinitionTable.getFunParamTypes(funName);
-        
-        if (funParamTypes == null) {
-            throw error(expr.name, "Undefined function '" + funName + "'.");
-        }
-
-        List<Token> paramOrder = functionDefinitionTable.getParamOrder(funName);
-        Expr[] arguments = new Expr[paramOrder.size()];
-
-        do {
-            match(EOS); // skip empty lines
-            if (check(RIGHT_PAREN)) break;
-            Token paramName = consume(IDENTIFIER, "Invalid parameter.");
-            
-            if (boundParams.contains(paramName.lexeme)) {
-                throw error(paramName, "Duplicate parameter '" + paramName.lexeme + "'.");
-            }
-            
-            TokenType paramType = funParamTypes.get(paramName.lexeme);
-            if (paramType == null) {
-                throw error(paramName, "Unknown parameter '" + paramName.lexeme + "'.");
-            }
-            
-            int paramIndex = paramOrder.indexOf(paramName);
-            consume(EQUAL, "Expect '=' after parameter name.");
-
-            Expr argument = ternaryConditional(); // comma expression is not allowed
-            if (argument.valueType != paramType) {
-                error(paramName, "Parameter and argument expression have different types.");
-            }
-
-            arguments[paramIndex] = argument; 
-            boundParams.add(paramName.lexeme);
-        } while (match(COMMA));
-
-        Token paren = consume(RIGHT_PAREN, "Expect ')' after arguments.");
-        return new Expr.Call(expr, paren, Arrays.asList(arguments), expr.valueType);
-    }
-
-    private Expr.Call finishCallWithDynamicType(Expr expr) {
         List<Expr> arguments = new ArrayList<>();
         Token paren = null;
 
@@ -872,7 +749,7 @@ class Parser {
         } while (match(COMMA));
 
         paren = consume(RIGHT_PAREN, "Expect ')' after arguments.");
-        return new Expr.Call(expr, paren, arguments, NIL); // dynamic type, unknow at compile time
+        return new Expr.Call(expr, paren, arguments, CALLABLE); // temp workaround
     }
 
     private Expr primary() {
@@ -969,17 +846,20 @@ class Parser {
     
     private boolean check(TokenType type) {
         if (isAtEnd()) {
-            return false;
+            if (type != EOF) {
+                throw error(peek(), "Unexpected end of file.");
+            }
         }
 
         return peek().tokenType == type;
     }
 
     private Token advance() {
-        if (!isAtEnd()) {
-            current++;
+        if (isAtEnd()) {
+            throw error(peek(), "Unexpected end of file.");
         }
 
+        current++;
         return previous();
     }
 
