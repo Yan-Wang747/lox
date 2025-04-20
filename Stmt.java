@@ -146,14 +146,14 @@ abstract class Stmt {
 
     static class VarDecl extends Stmt {
 
+        final Token mut;
         final Token name;
         final Expr initializer;
-        final boolean isMutable;
 
-        VarDecl(Token name, Expr initializer, boolean isMutable) {
+        VarDecl(Token mut, Token name, Expr initializer) {
+            this.mut = mut;
             this.name = name;
             this.initializer = initializer;
-            this.isMutable = isMutable;
         }
 
         @Override
