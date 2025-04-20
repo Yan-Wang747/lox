@@ -179,15 +179,6 @@ class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
     }
 
     @Override
-    public Object visit(Expr.List_ expr) {
-        List<Object> values = new ArrayList<>();
-        for (Expr item : expr.items) {
-            values.add(evaluate(item));
-        }
-        return values;
-    }
-
-    @Override
     public Object visit(Expr.Literal expr) {
         return expr.value;
     }

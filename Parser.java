@@ -1,11 +1,7 @@
 package lox;
 
 import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
-import java.util.Set;
 
 import static lox.TokenType.*;
 
@@ -18,52 +14,7 @@ class Parser {
         }
     }
 
-    private class VariableTable {
-
-        private final VariableTable enclosing;
-        private final Map<String, TokenType> name_type = new HashMap<>();
-        private final Set<String> mutables = new HashSet<>();
-
-        VariableTable() {
-            this.enclosing = null;
-        }
-
-        VariableTable(VariableTable enclosing) {
-            this.enclosing = enclosing;
-        }
-
-        TokenType add(String name, TokenType type, boolean isMutable) {
-            if (isMutable)
-                mutables.add(name);
-
-            return name_type.put(name, type);
-        }
-
-        boolean isMutable(String name) {
-            if (mutables.contains(name))
-                return true;
-            
-            if (enclosing != null)
-                return enclosing.isMutable(name);
-            
-            return false;
-        }
-
-        TokenType getType(String name) {
-            if (name_type.containsKey(name)) {
-                return name_type.get(name);
-            }
-
-            if (enclosing != null) 
-                return enclosing.getType(name);
-
-            return null;
-        }
-    }
-
     private boolean hasLoopTermination = false;
-    private VariableTable variableTable = new VariableTable();
-    private final ExprStaticChecker staticChecker = new ExprStaticChecker();
     private final List<Token> tokens;
     private int current = 0;
 
@@ -82,16 +33,15 @@ class Parser {
                     hasLoopTermination = false;
 
                     current--; // recover the last EOS token for the next then block
-                    Stmt.Block thenBranch = new Stmt.Block(block(new VariableTable(this.variableTable), true));
+                    Stmt.Block thenBranch = new Stmt.Block(block());
                     current -= 2; // recover the last } EOS tokens for the current block
 
                     if (!thenBranch.statements.isEmpty()) {
                         Token name = new Token(TokenType.IDENTIFIER, "break", null, previous().line);
-                        Expr.Variable breakVari = new Expr.Variable(name, BOOL_TYPE);
+                        Expr.Variable breakVari = new Expr.Variable(name);
                         Expr.Unary notBreak = new Expr.Unary(
                             new Token(BANG, "!", null, previous().line), 
-                            breakVari, 
-                            BOOL_TYPE
+                            breakVari
                         );
                         Stmt.If ifStmt = new Stmt.If(notBreak, thenBranch, null);
                         statements.add(ifStmt);
@@ -131,41 +81,15 @@ class Parser {
 
         // bind lambda to the function name
         Expr.Lambda lambda = lambda();
-        this.variableTable.add(funName.lexeme, CALLABLE, false); // allow redeclaration of functions
         return new Stmt.Function(funName, lambda);
     }
 
     private Stmt varDeclaration(boolean isMutable) {
         Token name = consume(IDENTIFIER, "Expect variable/constant name.");
-        TokenType varType = null;
-        if (match(COLON)) {
-            if (match(NUM_TYPE, STR_TYPE, BOOL_TYPE)) {
-                varType = previous().tokenType;
-            }
-            else {
-                throw error(peek(), "Invalid type '" + peek().lexeme + "'.");
-            }
-        }
-
         consume(EQUAL, "Expect '=' after variable/constant name.");
-
         Expr initializer = expression();
-
-        if (varType == null){
-            if (initializer.valueType == NIL) {
-                throw error(name, "Initializer cannot be nil, type unknown.");
-            }
-            varType = initializer.valueType;
-        }
-        else {
-            if ((varType != initializer.valueType) && (initializer.valueType != NIL)) {
-                error(name, "Initializer type '" + initializer.valueType.name() + "' does not match variable type '" + varType.name() + "'.");
-            }
-        }
-        
         consume(SEMICOLON, "Expect ';' after variable/constant declaration.");
         
-        variableTable.add(name.lexeme, varType, isMutable); // allow redeclaration of variables
         return new Stmt.VarDecl(name, initializer, isMutable);
     }
     
@@ -176,7 +100,7 @@ class Parser {
         }
 
         if (match(LEFT_BRACE)) {
-            return new Stmt.Block(block(new VariableTable(this.variableTable), true));
+            return new Stmt.Block(block());
         }
 
         if (match(PRINT)) {
@@ -216,13 +140,8 @@ class Parser {
 
     private Stmt ifStatement() {
         Expr condition = expression();
-        if (condition.valueType != BOOL_TYPE) {
-            error(previous(), "Requires bool condition.");
-        }
-        
         consume(LEFT_BRACE, "Expect '{' after condition.");
-
-        Stmt thenBranch = new Stmt.Block(block(new VariableTable(this.variableTable), true));
+        Stmt thenBranch = new Stmt.Block(block());
         Stmt elseBranch = null;
         if (match(ELSE)) {
             if (match(IF)) { // else if clause
@@ -230,24 +149,18 @@ class Parser {
             }
             else {
                 consume(LEFT_BRACE, "Expect '{' after 'else'.");
-                elseBranch = new Stmt.Block(block(new VariableTable(this.variableTable), true));
+                elseBranch = new Stmt.Block(block());
             }
         }
 
         return new Stmt.If(condition, thenBranch, elseBranch);
     }
     
-    private List<Stmt> block(VariableTable newVarTable, boolean consumeEOS) {
-        this.variableTable = newVarTable;
-        try {
-            List<Stmt> statements = parse();
-            consume(RIGHT_BRACE, "Expect '}' after block.");
-            
-            return statements;
-        }
-        finally {
-            this.variableTable = newVarTable.enclosing;
-        }
+    private List<Stmt> block() {
+        List<Stmt> statements = parse();
+        consume(RIGHT_BRACE, "Expect '}' after block.");
+        
+        return statements;
     }
     
     private Stmt printStatement() {
@@ -259,12 +172,10 @@ class Parser {
     private Stmt returnStatement() {
         Token keyword = previous();
         if (match(SEMICOLON)) {
-            this.variableTable.add("return", NIL, false); // used to check type after return
             return new Stmt.Return(keyword, null);
         }
         Expr value = expression();
         consume(SEMICOLON, "Expect ';' after return statement.");
-        this.variableTable.add("return", value.valueType, false);
 
         return new Stmt.Return(keyword, value);
     }
@@ -276,22 +187,17 @@ class Parser {
             advance();
         }
 
-        // check if break/continue is inside a loop
-        if (variableTable.getType("break") == null) {
-            error(previous(), "Not inside a loop.");
-        }
-
         hasLoopTermination = true;
         // change break/continue variable to true
         Stmt setBreak = new Stmt.Assign(
             new Token(TokenType.IDENTIFIER, "break", null, previous().line), 
-            new Expr.Literal(true, BOOL_TYPE)
+            new Expr.Literal(true)
         );
         
         if (isContinue) {
             Stmt setContinue = new Stmt.Assign(
                 new Token(TokenType.IDENTIFIER, "continue", null, previous().line),  
-                new Expr.Literal(true, BOOL_TYPE)
+                new Expr.Literal(true)
             );
 
             return new Stmt.Block(List.of(setBreak, setContinue));
@@ -302,29 +208,14 @@ class Parser {
 
     private Stmt whileStatement() {
         Expr condition = expression();
-        if (condition.valueType != BOOL_TYPE) {
-            error(previous(), "Requires bool condition.");
-        }
-        
         consume(LEFT_BRACE, "Expect '{' after 'while'.");
-
-        // create special 'continue' and 'break' variables
-        VariableTable newVarTable = new VariableTable(this.variableTable);
-        newVarTable.add("continue", BOOL_TYPE, true);
-        newVarTable.add("break", BOOL_TYPE, true);
-        
-        Stmt body = new Stmt.Block(block(newVarTable, true));
+        Stmt body = new Stmt.Block(block());
 
         hasLoopTermination = false; // reset at the end of each loop
         return new Stmt.While(condition, body, null);
     }
     
     private Stmt forStatement() {
-        // for statement has its own scope
-        VariableTable enclosing = this.variableTable;
-        VariableTable newVariableTable = new VariableTable(enclosing);
-        this.variableTable = newVariableTable;
-
         try {
             Stmt initializer = null;
             if (!check(SEMICOLON)){
@@ -342,9 +233,6 @@ class Parser {
             Expr condition = null;
             if (!check(SEMICOLON)) {
                 condition = expression();
-                if (condition.valueType != BOOL_TYPE) {
-                    error(previous(), "Requires bool condition.");
-                }
             }
             consume(SEMICOLON, "Expect ';' after loop condition.");
 
@@ -355,15 +243,10 @@ class Parser {
 
             consume(LEFT_BRACE, "Expect '{' after increment.");
             
-            // create special 'continue' and 'break' variables
-            VariableTable newVarTable = new VariableTable(this.variableTable);
-            newVarTable.add("continue", BOOL_TYPE, true);
-            newVarTable.add("break", BOOL_TYPE, true);
-
-            Stmt body = new Stmt.Block(block(newVarTable, true));
+            Stmt body = new Stmt.Block(block());
 
             if (condition == null) 
-                condition = new Expr.Literal(true, BOOL_TYPE);
+                condition = new Expr.Literal(true);
             body = new Stmt.While(condition, body, increment);
 
             if (initializer != null) {
@@ -378,7 +261,6 @@ class Parser {
             return body;
         }
         finally {
-            this.variableTable = enclosing;
             hasLoopTermination = false; // reset at the end of each loop
         }
     }
@@ -386,11 +268,6 @@ class Parser {
     private Stmt assignmentStatement(Expr targetExpr) {
         Token targetName = get_left_value(targetExpr);
         Expr r_value = expression();
-
-        if ((targetExpr.valueType != r_value.valueType) && r_value.valueType != NIL) {
-            error(targetName, "Requires both operands to be of the same type.");
-        }
-
         consume(SEMICOLON, "Expect ';' after assignment.");
         return new Stmt.Assign(targetName, r_value);
     }
@@ -398,10 +275,6 @@ class Parser {
     private Token get_left_value(Expr expr) {
         if (expr instanceof Expr.Variable) {
             Expr.Variable varExpr = (Expr.Variable)expr;
-
-            if (!variableTable.isMutable(varExpr.name.lexeme)) {
-                error(varExpr.name, "Cannot assign to immutable variables.");
-            }
 
             return varExpr.name;
         }
@@ -421,7 +294,6 @@ class Parser {
     private Expr.Lambda lambda() {
         consume(LEFT_PAREN, "Expect '(' after 'fun'.");
         List<Token> paramTokens = new ArrayList<>();
-        VariableTable functionScope = new VariableTable(this.variableTable);
         do {
             if (check(RIGHT_PAREN)) break;
             if (paramTokens.size() >= 255) {
@@ -430,36 +302,14 @@ class Parser {
             
             boolean isMutable = match(MUT);
             Token paramName = consume(IDENTIFIER, "Expect parameter name.");
-            consume(COLON, "Expect ':' after parameter name.");
-
-            Token paramType = null;
-            if (match(NUM_TYPE, STR_TYPE, BOOL_TYPE, CALLABLE)) {
-                paramType = previous();
-            }
-            else {
-                throw error(peek(), "Invalid type '" + peek().lexeme + "'.");
-            }
             paramTokens.add(paramName);
-            functionScope.add(paramName.lexeme, paramType.tokenType, isMutable);
         } while (match(COMMA));
 
         consume(RIGHT_PAREN, "Expect ')' after parameters.");
-
-        TokenType expectedRetType = NIL;
-        if (match(COLON)) {
-            if (match(NUM_TYPE, STR_TYPE, BOOL_TYPE, CALLABLE)) {
-                expectedRetType = previous().tokenType;
-            }
-            else {
-                throw error(peek(), "Invalid type '" + peek().lexeme + "'.");
-            }
-        }
-
         consume(LEFT_BRACE, "Expect '{'");
+        List<Stmt> body = block();
 
-        List<Stmt> body = block(functionScope, false);
-
-        return new Expr.Lambda(paramTokens, body, expectedRetType);
+        return new Expr.Lambda(paramTokens, body);
     }
 
     private Expr expression() {
@@ -480,14 +330,7 @@ class Parser {
         while (match(COMMA)) {
             Token operator = previous();
             Expr right = ternaryConditional();
-            expr = new Expr.Binary(expr, operator, right, expr.valueType); 
-            
-            ParseError err = staticChecker.check(expr);
-            if (err != null) {
-                assert err instanceof ExprStaticChecker.DifferentTypeError;
-                // if got wrong type, expr value type will be invalid, panic
-                throw error(operator, err.getMessage());
-            }
+            expr = new Expr.Binary(expr, operator, right); 
         }
 
         return expr;
@@ -501,22 +344,7 @@ class Parser {
             Expr thenBranch = ternaryConditional();
             consume(COLON, "Expect ':' after then branch");
             Expr elseBranch = ternaryConditional();
-            expr = new Expr.TernaryConditional(expr, operator, thenBranch, elseBranch, thenBranch.valueType);
-            
-            ParseError err = staticChecker.check(expr);
-            if (err != null) {
-                if (err instanceof ExprStaticChecker.TypeError) {
-                    // don't panic for condition expr type error, still in a valid state
-                    error(operator, err.getMessage());
-                }
-                else if (err instanceof ExprStaticChecker.DifferentTypeError) {
-                    // if got wrong type, expr value type will be invalid, panic
-                    throw error(operator, err.getMessage());
-                }
-                else {
-                    throw new RuntimeException("Unknown checker error type: " + err.getClass().getName());
-                }
-            }
+            expr = new Expr.TernaryConditional(expr, operator, thenBranch, elseBranch);
         }
 
         return expr;
@@ -528,14 +356,7 @@ class Parser {
         while (match(OR)) {
             Token operator = previous();
             Expr right = and();
-            expr = new Expr.Binary(expr, operator, right, BOOL_TYPE);
-
-            ParseError err = staticChecker.check(expr);
-            if (err != null) {
-                assert err instanceof ExprStaticChecker.TypeError;
-                // don't panic for type error, still in a valid state, always bool type
-                error(operator, err.getMessage());
-            }
+            expr = new Expr.Binary(expr, operator, right);
         }
 
         return expr;
@@ -547,14 +368,7 @@ class Parser {
         while (match(AND)) {
             Token operator = previous();
             Expr right = equality();
-            expr = new Expr.Binary(expr, operator, right, BOOL_TYPE);
-        
-            ParseError err = staticChecker.check(expr);
-            if (err != null) {
-                assert err instanceof ExprStaticChecker.TypeError;
-                // don't panic for type error, still in a valid state, always bool type
-                error(operator, err.getMessage());
-            } 
+            expr = new Expr.Binary(expr, operator, right);
         }
 
         return expr;
@@ -574,15 +388,7 @@ class Parser {
         while (match(BANG_EQUAL, EQUAL_EQUAL)) {
             Token operator = previous();
             Expr right = comparison();
-            expr = new Expr.Binary(expr, operator, right, BOOL_TYPE);
-        
-            ParseError err = staticChecker.check(expr);
-            if (err != null) {
-                assert (err instanceof ExprStaticChecker.DifferentTypeError) ||
-                       (err instanceof ExprStaticChecker.TypeError);
-                // don't panic, still in a valid state, always bool type
-                error(operator, err.getMessage()); 
-            }
+            expr = new Expr.Binary(expr, operator, right);
         }
 
         return expr;
@@ -602,15 +408,7 @@ class Parser {
         while (match(GREATER, GREATER_EQUAL, LESS, LESS_EQUAL)) {
             Token operator = previous();
             Expr right = term();
-            expr = new Expr.Binary(expr, operator, right, BOOL_TYPE);
-        
-            ParseError err = staticChecker.check(expr);
-            if (err != null) {
-                assert (err instanceof ExprStaticChecker.DifferentTypeError) ||
-                       (err instanceof ExprStaticChecker.TypeError);
-                // don't panic, still in a valid state, always bool type
-                error(operator, err.getMessage()); 
-            }
+            expr = new Expr.Binary(expr, operator, right);
         }
 
         return expr;
@@ -630,15 +428,7 @@ class Parser {
         while (match(MINUS, PLUS)) {
             Token operator = previous();
             Expr right = factor();
-            expr = new Expr.Binary(expr, operator, right, expr.valueType);
-
-            ParseError err = staticChecker.check(expr);
-            if (err != null) {
-                assert (err instanceof ExprStaticChecker.DifferentTypeError) ||
-                       (err instanceof ExprStaticChecker.TypeError);
-                // if got wrong type, expr value type will be invalid, panic
-                throw error(operator, err.getMessage()); 
-            }
+            expr = new Expr.Binary(expr, operator, right);
         }
 
         return expr;
@@ -658,15 +448,7 @@ class Parser {
         while (match(SLASH, STAR)) {
             Token operator = previous();
             Expr right = unary();
-            expr = new Expr.Binary(expr, operator, right, NUM_TYPE);
-        
-            ParseError err = staticChecker.check(expr);
-            if (err != null) {
-                assert (err instanceof ExprStaticChecker.DifferentTypeError) ||
-                       (err instanceof ExprStaticChecker.TypeError);
-                // don't panic, still in a valid state, always num type
-                error(operator, err.getMessage()); 
-            }
+            expr = new Expr.Binary(expr, operator, right);
         }
 
         return expr;
@@ -679,21 +461,13 @@ class Parser {
             
             Expr.Unary expr = null;
             if (operator.tokenType == MINUS) {
-                expr = new Expr.Unary(operator, right, NUM_TYPE);
+                expr = new Expr.Unary(operator, right);
             }
             else if (operator.tokenType == BANG) {
-                expr = new Expr.Unary(operator, right, BOOL_TYPE);
+                expr = new Expr.Unary(operator, right);
             }
             else {
                 throw new RuntimeException("Invalid unary operator.");
-            }
-                
-        
-            ParseError err = staticChecker.check(expr);
-            if (err != null) {
-                assert err instanceof ExprStaticChecker.TypeError;
-                // don't panic, still in a valid state
-                error(operator, err.getMessage()); 
             }
 
             return expr;
@@ -729,44 +503,40 @@ class Parser {
         } while (match(COMMA));
 
         paren = consume(RIGHT_PAREN, "Expect ')' after arguments.");
-        return new Expr.Call(expr, paren, arguments, CALLABLE); // temp workaround
+        return new Expr.Call(expr, paren, arguments); // temp workaround
     }
 
     private Expr primary() {
         if (match(FALSE)) {
-            return new Expr.Literal(false, BOOL_TYPE);
+            return new Expr.Literal(false);
         }
 
         if (match(TRUE)) {
-            return new Expr.Literal(true, BOOL_TYPE);
+            return new Expr.Literal(true);
         }
 
         if (match(NIL)) {
-            return new Expr.Literal(null, NIL);
+            return new Expr.Literal(null);
         }
 
         if (match(STR)) {
-            return new Expr.Literal(previous().literal, STR_TYPE);
+            return new Expr.Literal(previous().literal);
         }
 
         if (match(NUM)) {
-            return new Expr.Literal(previous().literal, NUM_TYPE);
+            return new Expr.Literal(previous().literal);
         }
 
         if (match(LEFT_PAREN)) {
             Expr expr = expression();
             consume(RIGHT_PAREN, "Expect ')' after expression.");
-            return new Expr.Grouping(expr, expr.valueType);
+            return new Expr.Grouping(expr);
         }
 
         if (match(IDENTIFIER)) {
             Token id = previous();
-            TokenType id_type = variableTable.getType(id.lexeme);
-            if (id_type == null) {
-                throw error(previous(), "Undefined variable '" + previous().lexeme + "'.");
-            }
 
-            return new Expr.Variable(id, id_type);
+            return new Expr.Variable(id);
         }
 
         if (match(FUN)) {

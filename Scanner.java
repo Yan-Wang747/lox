@@ -35,10 +35,6 @@ class Scanner {
         keywords.put("while",  WHILE);
         keywords.put("break",  BREAK);
         keywords.put("continue", CONTINUE);
-        keywords.put("str",    STR_TYPE);
-        keywords.put("num",    NUM_TYPE);
-        keywords.put("bool",   BOOL_TYPE);
-        keywords.put("callable", CALLABLE);
     }
 
     Scanner(String source) {
@@ -76,7 +72,6 @@ class Scanner {
 
         switch (c) {
             case '?': addToken(QUESTION); break;
-            case ':': addToken(COLON); break;
             case ';': addToken(SEMICOLON); break;
             case '(': addToken(LEFT_PAREN); break;
             case ')': addToken(RIGHT_PAREN); break;

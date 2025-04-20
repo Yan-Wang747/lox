@@ -11,15 +11,14 @@ class GenerateAst {
         String outputDir = "lox";
 
         defineAst(outputDir, "Expr", Arrays.asList(
-            "List_      : List<Expr> items, TokenType valueType",
-            "Binary     : Expr left, Token operator, Expr right, TokenType valueType",
-            "Grouping   : Expr expression, TokenType valueType",
-            "Literal    : Object value, TokenType valueType",
-            "Variable   : Token name, TokenType valueType",
-            "Unary      : Token operator, Expr right, TokenType valueType",
-            "TernaryConditional : Expr condition, Token question, Expr thenBranch, Expr elseBranch, TokenType valueType",
-            "Call       : Expr callee, Token paren, List<Expr> arguments, TokenType valueType",
-            "Lambda     : List<Token> params, List<Stmt> body, TokenType valueType"
+            "Binary     : Expr left, Token operator, Expr right",
+            "Grouping   : Expr expression",
+            "Literal    : Object value",
+            "Variable   : Token name",
+            "Unary      : Token operator, Expr right",
+            "TernaryConditional : Expr condition, Token question, Expr thenBranch, Expr elseBranch",
+            "Call       : Expr callee, Token paren, List<Expr> arguments",
+            "Lambda     : List<Token> params, List<Stmt> body"
             ));
         
         defineAst(outputDir, "Stmt", Arrays.asList(
@@ -47,15 +46,6 @@ class GenerateAst {
         writer.println("abstract class " + baseName + " {");
         writer.println();
 
-        if (baseName.equals("Expr")) {
-            writer.println("    final TokenType valueType;");
-            writer.println();
-            writer.println("    " + baseName + "(TokenType valueType) {"); // add the constructor
-            writer.println("        this.valueType = valueType;");
-            writer.println("    }");
-            writer.println();
-        }
-
         defineVisitor(writer, baseName, types);
         
         // The base accept() method
@@ -80,20 +70,15 @@ class GenerateAst {
         // Fields
         String[] fields = fieldList.split(", ");
         for (String field : fields) {
-            if (field.equals("TokenType valueType")) continue;
             writer.println("        final " + field + ";");
         }
         writer.println();
 
         // Constructor
         writer.println("        " + className + "(" + fieldList + ") {");
-        if (baseName.equals("Expr")) {
-            writer.println("            super(valueType);");
-        }
 
         // Store parameters in fields
         for (String field : fields) {
-            if (field.equals("TokenType valueType")) continue;
             String name = field.split(" ")[1];
             writer.println("            this." + name + " = " + name + ";");
         }
