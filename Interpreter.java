@@ -1,7 +1,5 @@
 package lox;
 
-import java.util.HashMap;
-import java.util.Map;
 import java.util.List;
 import java.util.ArrayList;
 
@@ -147,7 +145,11 @@ class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
         environment.define(breakToken, false);
         environment.define(continueToken, false);
         
-        while ((boolean)evaluate(stmt.condition)) {
+        Object condition = evaluate(stmt.condition);
+        if (!(condition instanceof Boolean))
+            throw new RuntimeError(null, "Condition of while must be a boolean.");
+
+        while ((boolean)condition) {
             execute(stmt.body);
             if ((boolean)environment.get(breakToken) && !(boolean)environment.get(continueToken))
                 break;
@@ -254,16 +256,16 @@ class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
                 if (left instanceof Double && right instanceof Double) {
                     return (double)left + (double)right;
                 }
-                if (left instanceof String && right instanceof String) {
+                else if (left instanceof String && right instanceof String) {
                     return (String)left + (String)right;
                 }
-                if (left instanceof String || right instanceof String) {
+                else if (left instanceof String || right instanceof String) {
                     return stringify(left) + stringify(right);
                 }
-                throw new RuntimeError(
-                    expr.operator, 
-                "Operands must be two numbers or strings."
-                );
+                else {
+                    throw new RuntimeError(expr.operator, "Operands must be two numbers or strings.");
+                }
+                
             case GREATER:
                 try {
                     checkNumberOperands(expr.operator, left, right);
@@ -274,16 +276,14 @@ class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
                     return ((String)left).compareTo((String)right) > 0;
                 }
             case GREATER_EQUAL:
-                checkNumberOperands(expr.operator, left, right);
-                return (double)left >= (double)right;
-            case LESS:
-                checkNumberOperands(expr.operator, left, right);
-                return (double)left < (double)right;
-            case LESS_EQUAL:
-                checkNumberOperands(expr.operator, left, right);
-                return (double)left <= (double)right;
-            case BANG_EQUAL:
-                return !isEqual(left, right);
+                try {
+                    checkNumberOperands(expr.operator, left, right);
+                    return (double)left >= (double)right;
+                }
+                catch (RuntimeError e) {
+                    checkStringOperands(expr.operator, left, right);
+                    return ((String)left).compareTo((String)right) >= 0;
+                }
             case EQUAL_EQUAL:
                 return isEqual(left, right);
             case COMMA:

@@ -388,7 +388,18 @@ class Parser {
         while (match(BANG_EQUAL, EQUAL_EQUAL)) {
             Token operator = previous();
             Expr right = comparison();
-            expr = new Expr.Binary(expr, operator, right);
+
+            Token bangToken = new Token(BANG, "!", null, operator.line);
+            if (operator.tokenType == EQUAL_EQUAL) {
+                expr = new Expr.Binary(expr, operator, right);
+            }
+            else if (operator.tokenType == BANG_EQUAL) {
+                Token equalEqualToken = new Token(EQUAL_EQUAL, "==", null, operator.line);
+                expr = new Expr.Unary(bangToken, new Expr.Binary(expr, equalEqualToken, right));
+            }
+            else {
+                throw new RuntimeException("Invalid equality operator.");
+            }
         }
 
         return expr;
@@ -408,7 +419,22 @@ class Parser {
         while (match(GREATER, GREATER_EQUAL, LESS, LESS_EQUAL)) {
             Token operator = previous();
             Expr right = term();
-            expr = new Expr.Binary(expr, operator, right);
+
+            Token bangToken = new Token(BANG, "!", null, operator.line);
+            if (operator.tokenType == GREATER || operator.tokenType == GREATER_EQUAL) {
+                expr = new Expr.Binary(expr, operator, right);
+            }
+            else if (operator.tokenType == LESS) {
+                Token greaterEqualToken = new Token(GREATER_EQUAL, ">=", null, operator.line);
+                expr = new Expr.Unary(bangToken, new Expr.Binary(expr, greaterEqualToken, right));
+            }
+            else if (operator.tokenType == LESS_EQUAL) {
+                Token greaterToken = new Token(GREATER, ">", null, operator.line);
+                expr = new Expr.Unary(bangToken, new Expr.Binary(expr, greaterToken, right));
+            }
+            else {
+                throw new RuntimeException("Invalid comparison operator.");
+            }
         }
 
         return expr;
