@@ -73,7 +73,7 @@ class Lox{
         if (token.tokenType == TokenType.EOF) {
             report(token.line, " at end", message);
         }
-        else if (token.tokenType == TokenType.NL) {
+        else if (token.tokenType == TokenType.SEMICOLON) {
             report(token.line, " at the line end", message);
         }
         else {

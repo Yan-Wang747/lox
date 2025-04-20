@@ -66,7 +66,6 @@ class Parser {
     private final ExprStaticChecker staticChecker = new ExprStaticChecker();
     private final List<Token> tokens;
     private int current = 0;
-    private TokenType EOS = TokenType.NL;
 
     Parser(List<Token> tokens) {
         this.tokens = tokens;
@@ -75,11 +74,8 @@ class Parser {
     List<Stmt> parse() {
         List<Stmt> statements = new ArrayList<>();
         while (!isAtEnd() && !check(RIGHT_BRACE)) {
-            // skip empty lines
-            if (match(EOS)) 
-                continue;
-
             try {
+                // empty statements are errors
                 statements.add(declaration());
 
                 if (hasLoopTermination) { // put remaining statements in a if block testing the break variable
@@ -132,7 +128,6 @@ class Parser {
 
     private Stmt.Function function(String kind) {
         Token funName = consume(IDENTIFIER, "Expect " + kind + " name.");
-        match(EOS);
 
         // bind lambda to the function name
         Expr.Lambda lambda = lambda();
@@ -168,7 +163,7 @@ class Parser {
             }
         }
         
-        consume(EOS, "Expect '" + EOS + "' after variable/constant declaration.");
+        consume(SEMICOLON, "Expect ';' after variable/constant declaration.");
         
         variableTable.add(name.lexeme, varType, isMutable); // allow redeclaration of variables
         return new Stmt.VarDecl(name, initializer, isMutable);
@@ -225,14 +220,11 @@ class Parser {
             error(previous(), "Requires bool condition.");
         }
         
-        match(EOS); // skip empty lines
         consume(LEFT_BRACE, "Expect '{' after condition.");
 
         Stmt thenBranch = new Stmt.Block(block(new VariableTable(this.variableTable), true));
         Stmt elseBranch = null;
         if (match(ELSE)) {
-            match(EOS); // skip empty lines
-
             if (match(IF)) { // else if clause
                 elseBranch = ifStatement();
             }
@@ -248,13 +240,8 @@ class Parser {
     private List<Stmt> block(VariableTable newVarTable, boolean consumeEOS) {
         this.variableTable = newVarTable;
         try {
-            match(EOS); // skip empty lines
-
             List<Stmt> statements = parse();
             consume(RIGHT_BRACE, "Expect '}' after block.");
-            if (consumeEOS) {
-                consume(EOS, "Expect '" + EOS + "' after block.");
-            }
             
             return statements;
         }
@@ -265,25 +252,25 @@ class Parser {
     
     private Stmt printStatement() {
         Expr value = expression();
-        consume(EOS, "Expect '" + EOS + "' after the print statement.");
+        consume(SEMICOLON, "Expect ';' after the print statement.");
         return new Stmt.Print(value);
     }
     
     private Stmt returnStatement() {
         Token keyword = previous();
-        if (match(EOS)) {
+        if (match(SEMICOLON)) {
             this.variableTable.add("return", NIL, false); // used to check type after return
             return new Stmt.Return(keyword, null);
         }
         Expr value = expression();
-        consume(EOS, "Expect '" + EOS + "' after return statement.");
+        consume(SEMICOLON, "Expect ';' after return statement.");
         this.variableTable.add("return", value.valueType, false);
 
         return new Stmt.Return(keyword, value);
     }
 
     private Stmt breakStatement(boolean isContinue) {
-        consume(EOS, "Expect '" + EOS + "' after " + previous().lexeme + " statement.");
+        consume(SEMICOLON, "Expect ';' after " + previous().lexeme + " statement.");
         // skip following statements
         while (!check(RIGHT_BRACE)) {
             advance();
@@ -319,7 +306,6 @@ class Parser {
             error(previous(), "Requires bool condition.");
         }
         
-        match(EOS); // skip empty lines
         consume(LEFT_BRACE, "Expect '{' after 'while'.");
 
         // create special 'continue' and 'break' variables
@@ -338,45 +324,36 @@ class Parser {
         VariableTable enclosing = this.variableTable;
         VariableTable newVariableTable = new VariableTable(enclosing);
         this.variableTable = newVariableTable;
-        this.EOS = TokenType.SEMICOLON; // allow ';' as EOS in for initializer
 
         try {
             Stmt initializer = null;
-            if (match(EOS)) {
-                initializer = null;
+            if (!check(SEMICOLON)){
+                if (match(VAR)) {
+                    consume(MUT, "Expect 'mut' after 'var' in loop initializer.");
+                    initializer = varDeclaration(true);
             }
-            else if (match(VAR)) {
-                consume(MUT, "Expect 'mut' after 'var' in loop initializer.");
-                initializer = varDeclaration(true);
+                else {
+                    Expr targetExpr = expression();
+                    consume(EQUAL, "Expect '=' in loop initializer.");
+                    initializer = assignmentStatement(targetExpr);
+                }
             }
-            else {
-                Expr targetExpr = expression();
-                initializer = assignmentStatement(targetExpr);
-            }
-
-            match(NL); // skip empty lines
 
             Expr condition = null;
-            if (!check(EOS)) {
+            if (!check(SEMICOLON)) {
                 condition = expression();
                 if (condition.valueType != BOOL_TYPE) {
                     error(previous(), "Requires bool condition.");
                 }
             }
-            consume(EOS, "Expect ';' after loop condition.");
-
-            match(NL); // skip empty lines
+            consume(SEMICOLON, "Expect ';' after loop condition.");
 
             Stmt increment = null;
-            if (!check(EOS)) {
+            if (!check(SEMICOLON)) {
                 increment = statement();
             }
 
-            match(NL); // skip empty lines
-
             consume(LEFT_BRACE, "Expect '{' after increment.");
-
-            this.EOS = TokenType.NL; // reset EOS to NL
             
             // create special 'continue' and 'break' variables
             VariableTable newVarTable = new VariableTable(this.variableTable);
@@ -403,7 +380,6 @@ class Parser {
         finally {
             this.variableTable = enclosing;
             hasLoopTermination = false; // reset at the end of each loop
-            this.EOS = TokenType.NL; // reset EOS to NL
         }
     }
     
@@ -415,7 +391,7 @@ class Parser {
             error(targetName, "Requires both operands to be of the same type.");
         }
 
-        consume(EOS, "Expect '" + EOS + "' after assignment.");
+        consume(SEMICOLON, "Expect ';' after assignment.");
         return new Stmt.Assign(targetName, r_value);
     }
 
@@ -438,7 +414,7 @@ class Parser {
     }
 
     private Stmt expressionStatement(Expr expr) {
-        consume(EOS, "Expect '" + EOS + "' after expression.");
+        consume(SEMICOLON, "Expect ';' after expression.");
         return new Stmt.Expression(expr);
     }
 
@@ -447,7 +423,6 @@ class Parser {
         List<Token> paramTokens = new ArrayList<>();
         VariableTable functionScope = new VariableTable(this.variableTable);
         do {
-            match(EOS); // skip empty lines
             if (check(RIGHT_PAREN)) break;
             if (paramTokens.size() >= 255) {
                 error(peek(), "Cannot have more than 255 parameters.");
@@ -468,7 +443,6 @@ class Parser {
             functionScope.add(paramName.lexeme, paramType.tokenType, isMutable);
         } while (match(COMMA));
 
-        match(EOS); // skip empty lines
         consume(RIGHT_PAREN, "Expect ')' after parameters.");
 
         TokenType expectedRetType = NIL;
@@ -480,7 +454,6 @@ class Parser {
                 throw error(peek(), "Invalid type '" + peek().lexeme + "'.");
             }
         }
-        match(EOS); // skip empty lines
 
         consume(LEFT_BRACE, "Expect '{'");
 
@@ -506,7 +479,6 @@ class Parser {
 
         while (match(COMMA)) {
             Token operator = previous();
-            match(EOS); // skip empty lines
             Expr right = ternaryConditional();
             expr = new Expr.Binary(expr, operator, right, expr.valueType); 
             
@@ -526,10 +498,8 @@ class Parser {
 
         if (match(QUESTION)) {
             Token operator = previous();
-            match(EOS); // skip empty lines
             Expr thenBranch = ternaryConditional();
             consume(COLON, "Expect ':' after then branch");
-            match(EOS); // skip empty lines
             Expr elseBranch = ternaryConditional();
             expr = new Expr.TernaryConditional(expr, operator, thenBranch, elseBranch, thenBranch.valueType);
             
@@ -752,7 +722,6 @@ class Parser {
         Token paren = null;
 
         do {
-            match(EOS); // skip empty lines
             if (check(RIGHT_PAREN)) break;
 
             Expr argument = ternaryConditional(); // comma expression is not allowed
@@ -833,7 +802,7 @@ class Parser {
 
     private void synchronize() {
         while (!isAtEnd()) {
-            if (peek().tokenType == EOS) {
+            if (peek().tokenType == SEMICOLON) {
                 advance();
                 return;
             }

@@ -43,9 +43,6 @@ class Scanner {
 
     Scanner(String source) {
         this.source = source;
-
-        // remove leading white spaces to avoid empty statements
-        discard_whitespaces();
     }
 
     List<Token> scanTokens() {
@@ -53,10 +50,6 @@ class Scanner {
             start = current;
             scanToken();
         }
-
-        // add an NL, EOF token at the end
-        if (tokens.get(tokens.size() - 1).tokenType != NL)
-            tokens.add(new Token(NL, "", null, line));
         
         tokens.add(new Token(EOF, "", null, line));
         return tokens;
@@ -119,18 +112,12 @@ class Scanner {
                 else
                     addToken(SLASH);
                 break;
-            case '\\': 
-                // ignore white spaces following backslashes
-                discard_whitespaces(); break; 
             case ' ':
             case '\r':
             case '\t':
                 break;
-            case '\n': // also used as end of statement
-                // skip duplicate new lines, speed up a little
-                addToken(NL);
+            case '\n':
                 line++;
-                discard_whitespaces();
                 break;
             case '"': 
                 string(); 
@@ -212,14 +199,6 @@ class Scanner {
 
     private char advance() {
         return source.charAt(current++);
-    }
-
-    private void discard_whitespaces(){ 
-        while (!isAtEnd() && (Character.isWhitespace(peek()) || peek() == ';')) {
-            char c = advance();
-            if (c == '\n')
-                line++;
-        }
     }
 
     private void addToken(TokenType type) {
