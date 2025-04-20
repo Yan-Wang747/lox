@@ -829,12 +829,6 @@ class Parser {
     }
     
     private boolean check(TokenType type) {
-        if (isAtEnd()) {
-            if (type != EOF) {
-                throw error(peek(), "Unexpected end of file.");
-            }
-        }
-
         return peek().tokenType == type;
     }
 
