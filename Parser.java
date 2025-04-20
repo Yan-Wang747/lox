@@ -70,7 +70,12 @@ class Parser {
         }
 
         if (match(VAR)) {
-            return varDeclaration(match(MUT));
+            Token mut = null;
+            if (match(MUT)) {
+                mut = previous();
+            }
+
+            return varDeclaration(mut);
         }
 
         return statement();
@@ -84,13 +89,13 @@ class Parser {
         return new Stmt.Function(funName, lambda);
     }
 
-    private Stmt varDeclaration(boolean isMutable) {
+    private Stmt varDeclaration(Token mut) {
         Token name = consume(IDENTIFIER, "Expect variable/constant name.");
         consume(EQUAL, "Expect '=' after variable/constant name.");
         Expr initializer = expression();
         consume(SEMICOLON, "Expect ';' after variable/constant declaration.");
         
-        return new Stmt.VarDecl(name, initializer, isMutable);
+        return new Stmt.VarDecl(mut, name, initializer);
     }
     
     private Stmt statement() {
@@ -220,8 +225,8 @@ class Parser {
             Stmt initializer = null;
             if (!check(SEMICOLON)){
                 if (match(VAR)) {
-                    consume(MUT, "Expect 'mut' after 'var' in loop initializer.");
-                    initializer = varDeclaration(true);
+                    Token mut = consume(MUT, "Expect 'mut' after 'var' in loop initializer.");
+                    initializer = varDeclaration(mut);
             }
                 else {
                     Expr targetExpr = expression();

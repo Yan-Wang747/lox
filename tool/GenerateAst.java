@@ -30,7 +30,7 @@ class GenerateAst {
             "Print      : Expr expression",
             "Return     : Token keyword, Expr value",
             "While      : Expr condition, Stmt body, Stmt increment",
-            "VarDecl    : Token name, Expr initializer, boolean isMutable"
+            "VarDecl    : Token mut, Token name, Expr initializer"
         ));
 
     }
