@@ -2,11 +2,14 @@ package lox;
 
 import java.util.List;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Map;
 
 class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
     
     Environment globals = new Environment();
     private Environment environment = globals;
+    private final Map<Expr, Integer> locals = new HashMap<>();
 
     Interpreter() {
         // Define the global variables here
@@ -40,6 +43,10 @@ class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
 
     private void execute(Stmt statement) {
         statement.accept(this);
+    }
+
+    void resolve(Expr.Variable expr, int depth) {
+        locals.put(expr, depth);
     }
 
     private String stringify(Object object) {
@@ -107,8 +114,15 @@ class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
 
     @Override
     public Void visit(Stmt.Assign stmt) {
+        Expr.Variable target = (Expr.Variable) stmt.target;
         Object value = evaluate(stmt.value);
-        environment.assign(stmt.name, value);
+
+        Integer distance = locals.get(stmt.target);
+        if (distance != null) {
+            environment.assignAt(distance, target.name, value);
+        } else {
+            globals.assign(target.name, value);
+        }
         
         return null;
     }
@@ -230,7 +244,17 @@ class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
 
     @Override
     public Object visit(Expr.Variable expr) {
-        return environment.get(expr.name);
+        return lookUpVariable(expr);
+    }
+
+    private Object lookUpVariable(Expr.Variable expr) {
+        Token name = expr.name;
+        Integer distance = locals.get(expr);
+        if (distance != null) {
+            return environment.getAt(distance, name.lexeme);
+        } else {
+            return globals.get(name);
+        }
     }
 
     @Override

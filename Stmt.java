@@ -52,11 +52,13 @@ abstract class Stmt {
 
     static class Assign extends Stmt {
 
-        final Token name;
+        final Expr target;
+        final Token equal;
         final Expr value;
 
-        Assign(Token name, Expr value) {
-            this.name = name;
+        Assign(Expr target, Token equal, Expr value) {
+            this.target = target;
+            this.equal = equal;
             this.value = value;
         }
 

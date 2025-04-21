@@ -70,7 +70,7 @@ public class Resolver implements Expr.Visitor<Void>, Stmt.Visitor<Void> {
     @Override
     public Void visit(Expr.Variable expr) {
         if (!scopes.isEmpty() &&
-            scopes.peek().get(expr.name.lexeme) == false) {
+            scopes.peek().get(expr.name.lexeme) == Boolean.FALSE) {
             Lox.error(expr.name, "Cannot read local variable in its own initializer.");
         }
 
@@ -78,7 +78,7 @@ public class Resolver implements Expr.Visitor<Void>, Stmt.Visitor<Void> {
         return null;
     }
 
-    private void resolveLocal(Expr expr, Token name) {
+    private void resolveLocal(Expr.Variable expr, Token name) {
         for (int i = scopes.size() - 1; i >= 0; i--) {
             if (scopes.get(i).containsKey(name.lexeme)) {
                 interpreter.resolve(expr, scopes.size() - 1 - i);
@@ -87,20 +87,17 @@ public class Resolver implements Expr.Visitor<Void>, Stmt.Visitor<Void> {
         }
     }
 
-    private void resolveLocal(Stmt stmt, Token name) {
-        for (int i = scopes.size() - 1; i >= 0; i--) {
-            if (scopes.get(i).containsKey(name.lexeme)) {
-                interpreter.resolve(stmt, scopes.size() - 1 - i);
-                return;
-            }
-        }
-    }
-
     @Override
     public Void visit(Stmt.Assign stmt) {
         resolve(stmt.value);
-        resolveLocal(stmt, stmt.name);
-        return null;
+
+        if (!(stmt.target instanceof Expr.Variable)) {
+            Lox.error(stmt.equal, "Invalid assignment target, only variables can be assigned to.");
+            return null;
+        }
+
+        Expr.Variable target = (Expr.Variable) stmt.target;
+        return visit(target);
     }
 
     @Override

@@ -135,7 +135,7 @@ class Parser {
         // try assignment statement
         Expr expr = expression();
         if (match(EQUAL)) {
-            return assignmentStatement(expr);
+            return assignmentStatement(expr, previous());
         }
         else {
             // not an assignment statement, return as an expression statement as default
@@ -194,16 +194,17 @@ class Parser {
 
         hasLoopTermination = true;
         // change break/continue variable to true
-        Stmt setBreak = new Stmt.Assign(
-            new Token(TokenType.IDENTIFIER, "break", null, previous().line), 
-            new Expr.Literal(true)
+        Expr.Variable breakVari = new Expr.Variable(
+            new Token(TokenType.IDENTIFIER, "break", null, 0)
         );
+        Token equal = new Token(TokenType.EQUAL, "=", null, 0);
+        Stmt setBreak = new Stmt.Assign(breakVari, equal, new Expr.Literal(true));
         
         if (isContinue) {
-            Stmt setContinue = new Stmt.Assign(
-                new Token(TokenType.IDENTIFIER, "continue", null, previous().line),  
-                new Expr.Literal(true)
+            Expr.Variable continueVari = new Expr.Variable(
+                new Token(TokenType.IDENTIFIER, "continue", null, 0)
             );
+            Stmt setContinue = new Stmt.Assign(continueVari, equal, new Expr.Literal(true));
 
             return new Stmt.Block(List.of(setBreak, setContinue));
         }
@@ -230,8 +231,8 @@ class Parser {
             }
                 else {
                     Expr targetExpr = expression();
-                    consume(EQUAL, "Expect '=' in loop initializer.");
-                    initializer = assignmentStatement(targetExpr);
+                    Token equal = consume(EQUAL, "Expect '=' in loop initializer.");
+                    initializer = assignmentStatement(targetExpr, equal);
                 }
             }
 
@@ -270,25 +271,10 @@ class Parser {
         }
     }
     
-    private Stmt assignmentStatement(Expr targetExpr) {
-        Token targetName = get_left_value(targetExpr);
+    private Stmt assignmentStatement(Expr targetExpr, Token equal) {
         Expr r_value = expression();
         consume(SEMICOLON, "Expect ';' after assignment.");
-        return new Stmt.Assign(targetName, r_value);
-    }
-
-    private Token get_left_value(Expr expr) {
-        if (expr instanceof Expr.Variable) {
-            Expr.Variable varExpr = (Expr.Variable)expr;
-
-            return varExpr.name;
-        }
-        
-        if (expr instanceof Expr.Grouping)
-            return get_left_value(((Expr.Grouping) expr).expression);
-
-        // previous token is '=''
-        throw error(previous(), "Invalid l-value of assignment.");
+        return new Stmt.Assign(targetExpr, equal, r_value);
     }
 
     private Stmt expressionStatement(Expr expr) {
@@ -305,7 +291,6 @@ class Parser {
                 error(peek(), "Cannot have more than 255 parameters.");
             }
             
-            boolean isMutable = match(MUT);
             Token paramName = consume(IDENTIFIER, "Expect parameter name.");
             paramTokens.add(paramName);
         } while (match(COMMA));
