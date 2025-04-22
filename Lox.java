@@ -67,9 +67,15 @@ class Lox{
     }
 
     private static void report(int line, String where, String message) {
-        System.err.println(
-            "[line " + line + "] Error" + where + ": " + message
-        );
+        if (line <= 0) {
+            System.err.println("Error: " + message);
+        }
+        else {
+            System.err.println(
+                "[line " + line + "] Error" + where + ": " + message
+            );
+        }
+
         hadError = true;
     }
 
@@ -83,6 +89,10 @@ class Lox{
         else {
             report(token.line, " at '" + token.lexeme + "'", message);
         }
+    }
+
+    static void error(String message) {
+        report(0, "", message);
     }
 
     static void runtimeError(RuntimeError error) {

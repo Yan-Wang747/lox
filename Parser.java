@@ -32,9 +32,8 @@ class Parser {
                 if (hasLoopTermination) { // put remaining statements in a if block testing the break variable
                     hasLoopTermination = false;
 
-                    current--; // recover the last EOS token for the next then block
                     Stmt.Block thenBranch = new Stmt.Block(block());
-                    current -= 2; // recover the last } EOS tokens for the current block
+                    current -= 1; // recover the last } tokens for the current block
 
                     if (!thenBranch.statements.isEmpty()) {
                         Token name = new Token(TokenType.IDENTIFIER, "break", null, previous().line);

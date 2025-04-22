@@ -6,8 +6,23 @@ import java.util.Map;
 import java.util.Stack;
 
 public class Resolver implements Expr.Visitor<Void>, Stmt.Visitor<Void> {
+
+    private enum FunctionType {
+        NONE,
+        FUNCTION,
+        METHOD,
+        INITIALIZER
+    }
+
+    private enum LocalVarState {
+        DECLARED,
+        DEFINED,
+        USED
+    }
+    
     private final Interpreter interpreter;
-    private final Stack<Map<String, Boolean>> scopes = new Stack<>();
+    private final Stack<Map<String, LocalVarState>> scopes = new Stack<>();
+    private FunctionType currentFunction = FunctionType.NONE;
 
     Resolver(Interpreter interpreter) {
         this.interpreter = interpreter;
@@ -36,11 +51,17 @@ public class Resolver implements Expr.Visitor<Void>, Stmt.Visitor<Void> {
     }
 
     private void beginScope() {
-        scopes.push(new HashMap<String, Boolean>());
+        scopes.push(new HashMap<String, LocalVarState>());
     }
 
     private void endScope() {
-        scopes.pop();
+        Map<String, LocalVarState> scope = scopes.pop();
+
+        for (Map.Entry<String, LocalVarState> entry : scope.entrySet()) {
+            if (entry.getValue() != LocalVarState.USED) {
+                Lox.error("Variable '" + entry.getKey() + "' is never used.");
+            }
+        }
     }
 
     @Override
@@ -56,21 +77,25 @@ public class Resolver implements Expr.Visitor<Void>, Stmt.Visitor<Void> {
     private void declare(Token name) {
         if (scopes.isEmpty()) return;
 
-        Map<String, Boolean> scope = scopes.peek();
-        scope.put(name.lexeme, false);
+        Map<String, LocalVarState> scope = scopes.peek();
+        if (scope.containsKey(name.lexeme)) {
+            Lox.error(name, "Variable with this name already declared in this scope.");
+        }
+
+        scope.put(name.lexeme, LocalVarState.DECLARED);
     }
 
     private void define(Token name) {
         if (scopes.isEmpty()) return;
 
-        Map<String, Boolean> scope = scopes.peek();
-        scope.put(name.lexeme, true);
+        Map<String, LocalVarState> scope = scopes.peek();
+        scope.put(name.lexeme, LocalVarState.DEFINED);
     }
 
     @Override
     public Void visit(Expr.Variable expr) {
         if (!scopes.isEmpty() &&
-            scopes.peek().get(expr.name.lexeme) == Boolean.FALSE) {
+            scopes.peek().get(expr.name.lexeme) == LocalVarState.DECLARED) {
             Lox.error(expr.name, "Cannot read local variable in its own initializer.");
         }
 
@@ -82,6 +107,7 @@ public class Resolver implements Expr.Visitor<Void>, Stmt.Visitor<Void> {
         for (int i = scopes.size() - 1; i >= 0; i--) {
             if (scopes.get(i).containsKey(name.lexeme)) {
                 interpreter.resolve(expr, scopes.size() - 1 - i);
+                scopes.get(i).put(name.lexeme, LocalVarState.USED);
                 return;
             }
         }
@@ -104,11 +130,14 @@ public class Resolver implements Expr.Visitor<Void>, Stmt.Visitor<Void> {
     public Void visit(Stmt.Function stmt) {
         declare(stmt.name);
         define(stmt.name);
-        resolveFunction(stmt);
+        resolveFunction(stmt, FunctionType.FUNCTION);
         return null;
     }
 
-    private void resolveFunction(Stmt.Function stmt) {
+    private void resolveFunction(Stmt.Function stmt, FunctionType type) {
+        FunctionType enclosingFunction = currentFunction;
+        currentFunction = type;
+
         beginScope();
         for (Token param : stmt.lambda.params) {
             declare(param);
@@ -116,6 +145,8 @@ public class Resolver implements Expr.Visitor<Void>, Stmt.Visitor<Void> {
         }
         resolve(stmt.lambda.body);
         endScope();
+
+        currentFunction = enclosingFunction;
     }
 
     @Override
@@ -142,6 +173,10 @@ public class Resolver implements Expr.Visitor<Void>, Stmt.Visitor<Void> {
 
     @Override
     public Void visit(Stmt.Return stmt) {
+        if (currentFunction == FunctionType.NONE) {
+            Lox.error(stmt.keyword, "Cannot return from top-level code.");
+        }
+
         if (stmt.value != null) {
             resolve(stmt.value);
         }
