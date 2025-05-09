@@ -100,6 +100,15 @@ class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
         return null;
     }
 
+    @Override
+    public Void visit(Stmt.Class stmt) {
+        environment.define(stmt.name, null);
+        LoxClass klass = new LoxClass(stmt.name.lexeme);
+        environment.assign(stmt.name, klass);
+
+        return null;
+    }
+
     void executeBlock(List<Stmt> statements, Environment newEnvironment) {
         Environment enclosing = this.environment;
         this.environment = newEnvironment;
@@ -125,6 +134,18 @@ class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
         }
         
         return null;
+    }
+
+    @Override
+    public Void visit(Stmt.Set stmt) {
+        Object object = evaluate(stmt.object);
+        if (object instanceof LoxInstance) {
+            LoxInstance instance = (LoxInstance)object;
+            Object value = evaluate(stmt.value);
+            instance.set(stmt.name, value);
+            return null;
+        }
+        throw new RuntimeError(stmt.name, "Only instances have fields.");
     }
     
     @Override
@@ -242,6 +263,15 @@ class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
         return function.call(this, arguments);
     }
 
+    @Override
+    public Object visit(Expr.Get expr) {
+        Object object = evaluate(expr.object);
+        if (object instanceof LoxInstance) {
+            return ((LoxInstance)object).get(expr.name);
+        }
+        throw new RuntimeError(expr.name, "Only instances have properties.");
+    }
+    
     @Override
     public Object visit(Expr.Variable expr) {
         return lookUpVariable(expr);

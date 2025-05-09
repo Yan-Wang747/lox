@@ -59,6 +59,10 @@ class Parser {
     }
 
     private Stmt declaration() {
+        if (match(CLASS)) {
+            return classDeclaration();
+        }
+
         if (match(FUN)) {
             if (check(IDENTIFIER)) {
                 return function("function");
@@ -78,6 +82,19 @@ class Parser {
         }
 
         return statement();
+    }
+
+    private Stmt classDeclaration() {
+        Token name = consume(IDENTIFIER, "Expect class name.");
+        consume(LEFT_BRACE, "Expect '{' before class body.");
+
+        List<Stmt.Function> methods = new ArrayList<>();
+        while (!check(RIGHT_BRACE) && !isAtEnd()) {
+            methods.add(function("method"));
+        }
+
+        consume(RIGHT_BRACE, "Expect '}' after class body.");
+        return new Stmt.Class(name, methods);
     }
 
     private Stmt.Function function(String kind) {
@@ -273,7 +290,17 @@ class Parser {
     private Stmt assignmentStatement(Expr targetExpr, Token equal) {
         Expr r_value = expression();
         consume(SEMICOLON, "Expect ';' after assignment.");
-        return new Stmt.Assign(targetExpr, equal, r_value);
+        
+        if (targetExpr instanceof Expr.Variable) {
+            return new Stmt.Assign(targetExpr, equal, r_value);
+        }
+        else if (targetExpr instanceof Expr.Get) {
+            Expr.Get get = (Expr.Get) targetExpr;
+            return new Stmt.Set(get.object, get.name, r_value);
+        }
+        else {
+            throw error(equal, "Invalid assignment target.");
+        }
     }
 
     private Stmt expressionStatement(Expr expr) {
@@ -497,6 +524,10 @@ class Parser {
         while (true) {
             if (match(LEFT_PAREN)) {
                 expr = finishCall(expr);
+            }
+            else if (match(DOT)) {
+                Token name = consume(IDENTIFIER, "Expect property name after '.'.");
+                expr = new Expr.Get(expr, name);
             }
             else {
                 break;

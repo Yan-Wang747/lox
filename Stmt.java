@@ -7,7 +7,9 @@ abstract class Stmt {
     interface Visitor<R> {
         R visit(If stmt);
         R visit(Block stmt);
+        R visit(Class stmt);
         R visit(Assign stmt);
+        R visit(Set stmt);
         R visit(Expression stmt);
         R visit(Function stmt);
         R visit(Print stmt);
@@ -50,6 +52,22 @@ abstract class Stmt {
         }
     }
 
+    static class Class extends Stmt {
+
+        final Token name;
+        final List<Stmt.Function> methods;
+
+        Class(Token name, List<Stmt.Function> methods) {
+            this.name = name;
+            this.methods = methods;
+        }
+
+        @Override
+        <R> R accept(Visitor<R> visitor) {
+            return visitor.visit(this);
+        }
+    }
+
     static class Assign extends Stmt {
 
         final Expr target;
@@ -59,6 +77,24 @@ abstract class Stmt {
         Assign(Expr target, Token equal, Expr value) {
             this.target = target;
             this.equal = equal;
+            this.value = value;
+        }
+
+        @Override
+        <R> R accept(Visitor<R> visitor) {
+            return visitor.visit(this);
+        }
+    }
+
+    static class Set extends Stmt {
+
+        final Expr object;
+        final Token name;
+        final Expr value;
+
+        Set(Expr object, Token name, Expr value) {
+            this.object = object;
+            this.name = name;
             this.value = value;
         }
 
