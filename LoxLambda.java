@@ -3,8 +3,8 @@ package lox;
 import java.util.List;
 
 public class LoxLambda implements LoxCallable{
-    private final Expr.Lambda lambdaExpr;
-    private final Environment closure;
+    protected final Expr.Lambda lambdaExpr;
+    protected final Environment closure;
     
     LoxLambda(Expr.Lambda lambdaExpr, Environment closure) {
         this.lambdaExpr = lambdaExpr;

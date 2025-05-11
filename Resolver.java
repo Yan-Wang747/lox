@@ -14,6 +14,12 @@ public class Resolver implements Expr.Visitor<Void>, Stmt.Visitor<Void> {
         INITIALIZER
     }
 
+    private enum ClassType {
+        NONE,
+        CLASS,
+        SUBCLASS
+    }
+
     private enum LocalVarState {
         DECLARED,
         DEFINED,
@@ -23,6 +29,7 @@ public class Resolver implements Expr.Visitor<Void>, Stmt.Visitor<Void> {
     private final Interpreter interpreter;
     private final Stack<Map<String, LocalVarState>> scopes = new Stack<>();
     private FunctionType currentFunction = FunctionType.NONE;
+    private ClassType currentClass = ClassType.NONE;
 
     Resolver(Interpreter interpreter) {
         this.interpreter = interpreter;
@@ -38,9 +45,23 @@ public class Resolver implements Expr.Visitor<Void>, Stmt.Visitor<Void> {
 
     @Override
     public Void visit(Stmt.Class stmt) {
+        ClassType enclosingClass = currentClass;
+        currentClass = ClassType.CLASS;
+
         declare(stmt.name);
         define(stmt.name);
 
+        beginScope();
+        scopes.peek().put("this", LocalVarState.DEFINED);
+
+        for (Stmt.Function method : stmt.methods) {
+            FunctionType declaration = FunctionType.METHOD;
+            resolveFunction(method, declaration);
+        }
+
+        endScope();
+
+        currentClass = enclosingClass;
         return null;
     }
 
@@ -105,6 +126,14 @@ public class Resolver implements Expr.Visitor<Void>, Stmt.Visitor<Void> {
         if (!scopes.isEmpty() &&
             scopes.peek().get(expr.name.lexeme) == LocalVarState.DECLARED) {
             Lox.error(expr.name, "Cannot read local variable in its own initializer.");
+        }
+
+        if (expr.name.tokenType == TokenType.THIS) {
+            if (currentClass == ClassType.NONE) {
+                Lox.error(expr.name, "Cannot use 'this' outside of a class.");
+            }
+
+            return null;
         }
 
         resolveLocal(expr, expr.name);

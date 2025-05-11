@@ -579,6 +579,10 @@ class Parser {
             return new Expr.Grouping(expr);
         }
 
+        if (match(THIS)) {
+            return new Expr.Variable(previous());
+        }
+
         if (match(IDENTIFIER)) {
             Token id = previous();
 
