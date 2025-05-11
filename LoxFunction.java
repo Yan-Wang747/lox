@@ -3,8 +3,8 @@ package lox;
 public class LoxFunction extends LoxLambda {
     private final Token funName;
     
-    LoxFunction(Stmt.Function stmt, Environment closure) {
-        super(stmt.lambda, closure);
+    LoxFunction(Stmt.Function stmt, Environment closure, boolean isInitializer) {
+        super(stmt.lambda, closure, isInitializer);
         
         this.funName = stmt.name;
     }
@@ -14,7 +14,7 @@ public class LoxFunction extends LoxLambda {
         Token thisToken = new Token(TokenType.THIS, "this", null, 0);
         environment.define(thisToken, instance);
         Stmt.Function expr = new Stmt.Function(funName, lambdaExpr);
-        return new LoxFunction(expr, environment);
+        return new LoxFunction(expr, environment, isInitializer);
     }
 
     @Override
