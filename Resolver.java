@@ -62,6 +62,10 @@ public class Resolver implements Expr.Visitor<Void>, Stmt.Visitor<Void> {
             resolveFunction(method, declaration);
         }
 
+        for (Stmt.Function method : stmt.staticMethods) {
+            resolveFunction(method, FunctionType.METHOD);
+        }
+
         endScope();
 
         currentClass = enclosingClass;
@@ -90,6 +94,9 @@ public class Resolver implements Expr.Visitor<Void>, Stmt.Visitor<Void> {
         Map<String, LocalVarState> scope = scopes.pop();
 
         for (Map.Entry<String, LocalVarState> entry : scope.entrySet()) {
+            if (entry.getKey().equals("this")) {
+                continue;
+            }
             if (entry.getValue() != LocalVarState.USED) {
                 Lox.error("Variable '" + entry.getKey() + "' is never used.");
             }
@@ -134,9 +141,8 @@ public class Resolver implements Expr.Visitor<Void>, Stmt.Visitor<Void> {
         if (expr.name.tokenType == TokenType.THIS) {
             if (currentClass == ClassType.NONE) {
                 Lox.error(expr.name, "Cannot use 'this' outside of a class.");
+                return null;
             }
-
-            return null;
         }
 
         resolveLocal(expr, expr.name);

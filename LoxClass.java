@@ -1,19 +1,27 @@
 package lox;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 public class LoxClass implements LoxCallable {
     final String name;
     private final Map<String, LoxFunction> methods;
+    private final Map<String, LoxFunction> staticMethods;
+    private final Map<String, Object> staticFields = new HashMap<>();
 
-    LoxClass(String name, Map<String, LoxFunction> methods) {
+    LoxClass(String name, Map<String, LoxFunction> methods, Map<String, LoxFunction> staticMethods) {
         this.name = name;
         this.methods = methods;
+        this.staticMethods = staticMethods;
     }
 
     LoxFunction findMethod(String name) {
         return methods.get(name);
+    }
+
+    LoxFunction findStaticMethod(String name) {
+        return staticMethods.get(name);
     }
 
     @Override
@@ -35,6 +43,26 @@ public class LoxClass implements LoxCallable {
         return initializer.arity();
     }
 
+    Object get(Token name) {
+        // handle static properties
+        if (staticFields.containsKey(name.lexeme)) {
+            return staticFields.get(name.lexeme);
+        }
+
+        LoxFunction method = findStaticMethod(name.lexeme);
+        if (method != null) {
+            return method;
+        }
+
+        throw new RuntimeError(name, "Undefined static property '" + name.lexeme + "'.");
+    }
+
+    void set(Token name, Object value) {
+        // handle static properties
+        staticFields.put(name.lexeme, value);
+        return;
+    }
+    
     @Override
     public String toString() {
         return name;

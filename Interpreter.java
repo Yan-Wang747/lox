@@ -111,7 +111,13 @@ class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
             methods.put(method.name.lexeme, function);
         }
 
-        LoxClass klass = new LoxClass(stmt.name.lexeme, methods);
+        Map<String, LoxFunction> staticMethods = new HashMap<>();
+        for (Stmt.Function method : stmt.staticMethods) {
+            LoxFunction function = new LoxFunction(method, environment, false);
+            staticMethods.put(method.name.lexeme, function);
+        }
+
+        LoxClass klass = new LoxClass(stmt.name.lexeme, methods, staticMethods);
         environment.assign(stmt.name, klass);
 
         return null;
@@ -151,6 +157,12 @@ class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
             LoxInstance instance = (LoxInstance)object;
             Object value = evaluate(stmt.value);
             instance.set(stmt.name, value);
+            return null;
+        }
+        else if (object instanceof LoxClass) {
+            LoxClass klass = (LoxClass)object;
+            Object value = evaluate(stmt.value);
+            klass.set(stmt.name, value);
             return null;
         }
         throw new RuntimeError(stmt.name, "Only instances have fields.");
@@ -275,9 +287,20 @@ class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
     public Object visit(Expr.Get expr) {
         Object object = evaluate(expr.object);
         if (object instanceof LoxInstance) {
-            return ((LoxInstance)object).get(expr.name);
+            Object property = ((LoxInstance)object).get(expr.name);
+            if (property instanceof LoxFunction && ((LoxFunction)property).lambdaExpr.isGetter) {
+                return ((LoxFunction)property).call(this, new ArrayList<>());
+            }
+            else if (property instanceof LoxClass && ((LoxClass)property).findStaticMethod(expr.name.lexeme) != null) {
+                return ((LoxClass)property).findStaticMethod(expr.name.lexeme);
+            }
+            return property;
         }
-        throw new RuntimeError(expr.name, "Only instances have properties.");
+        else if (object instanceof LoxClass) {
+            return ((LoxClass)object).get(expr.name);
+        }
+        else
+            throw new RuntimeError(expr.name, expr.name.lexeme + " has no properties.");
     }
     
     @Override

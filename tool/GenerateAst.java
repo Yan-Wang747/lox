@@ -19,13 +19,13 @@ class GenerateAst {
             "TernaryConditional : Expr condition, Token question, Expr thenBranch, Expr elseBranch",
             "Call       : Expr callee, Token paren, List<Expr> arguments",
             "Get        : Expr object, Token name",
-            "Lambda     : List<Token> params, List<Stmt> body"
+            "Lambda     : List<Token> params, List<Stmt> body, boolean isGetter"
             ));
         
         defineAst(outputDir, "Stmt", Arrays.asList(
             "If         : Expr condition, Stmt thenBranch, Stmt elseBranch",  
             "Block      : List<Stmt> statements",
-            "Class      : Token name, List<Stmt.Function> methods",
+            "Class      : Token name, List<Stmt.Function> methods, List<Stmt.Function> staticMethods",
             "Assign     : Expr target, Token equal, Expr value",
             "Set        : Expr object, Token name, Expr value",
             "Expression : Expr expression",

@@ -152,10 +152,12 @@ abstract class Expr {
 
         final List<Token> params;
         final List<Stmt> body;
+        final boolean isGetter;
 
-        Lambda(List<Token> params, List<Stmt> body) {
+        Lambda(List<Token> params, List<Stmt> body, boolean isGetter) {
             this.params = params;
             this.body = body;
+            this.isGetter = isGetter;
         }
 
         @Override

@@ -89,12 +89,16 @@ class Parser {
         consume(LEFT_BRACE, "Expect '{' before class body.");
 
         List<Stmt.Function> methods = new ArrayList<>();
+        List<Stmt.Function> staticMethods = new ArrayList<>();
         while (!check(RIGHT_BRACE) && !isAtEnd()) {
-            methods.add(function("method"));
+            if (match(CLASS))
+                staticMethods.add(function("method"));
+            else
+                methods.add(function("method"));
         }
 
         consume(RIGHT_BRACE, "Expect '}' after class body.");
-        return new Stmt.Class(name, methods);
+        return new Stmt.Class(name, methods, staticMethods);
     }
 
     private Stmt.Function function(String kind) {
@@ -309,23 +313,27 @@ class Parser {
     }
 
     private Expr.Lambda lambda() {
-        consume(LEFT_PAREN, "Expect '(' after 'fun'.");
         List<Token> paramTokens = new ArrayList<>();
-        do {
-            if (check(RIGHT_PAREN)) break;
-            if (paramTokens.size() >= 255) {
-                error(peek(), "Cannot have more than 255 parameters.");
-            }
-            
-            Token paramName = consume(IDENTIFIER, "Expect parameter name.");
-            paramTokens.add(paramName);
-        } while (match(COMMA));
+        boolean isGetter = true;
+        if (match(LEFT_PAREN)) {
+            isGetter = false;
+            do {
+                if (check(RIGHT_PAREN)) break;
+                if (paramTokens.size() >= 255) {
+                    error(peek(), "Cannot have more than 255 parameters.");
+                }
+                
+                Token paramName = consume(IDENTIFIER, "Expect parameter name.");
+                paramTokens.add(paramName);
+            } while (match(COMMA));
 
-        consume(RIGHT_PAREN, "Expect ')' after parameters.");
+            consume(RIGHT_PAREN, "Expect ')' after parameters.");
+        }
+        
         consume(LEFT_BRACE, "Expect '{'");
         List<Stmt> body = block();
 
-        return new Expr.Lambda(paramTokens, body);
+        return new Expr.Lambda(paramTokens, body, isGetter);
     }
 
     private Expr expression() {
