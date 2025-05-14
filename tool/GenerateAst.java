@@ -25,7 +25,7 @@ class GenerateAst {
         defineAst(outputDir, "Stmt", Arrays.asList(
             "If         : Expr condition, Stmt thenBranch, Stmt elseBranch",  
             "Block      : List<Stmt> statements",
-            "Class      : Token name, List<Stmt.Function> methods, List<Stmt.Function> staticMethods",
+            "Class      : Token name, Expr.Variable superclass, List<Stmt.Function> methods, List<Stmt.Function> staticMethods",
             "Assign     : Expr target, Token equal, Expr value",
             "Set        : Expr object, Token name, Expr value",
             "Expression : Expr expression",
