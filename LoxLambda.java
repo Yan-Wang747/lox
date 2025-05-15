@@ -23,7 +23,7 @@ public class LoxLambda implements LoxCallable{
         // Create a new environment for the function call
         Environment environment = new Environment(closure);
         for (int i = 0; i < lambdaExpr.params.size(); i++) {
-            environment.define(lambdaExpr.params.get(i), arguments.get(i));
+            environment.define(lambdaExpr.params.get(i).lexeme, arguments.get(i));
         }
         
         try{

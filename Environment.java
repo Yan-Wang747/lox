@@ -4,8 +4,8 @@ import java.util.HashMap;
 import java.util.Map;
 
 class Environment {
-    private final Environment enclosing;
-    private final Map<String, Object> values = new HashMap<>();
+    final Environment enclosing;
+    final Map<String, Object> values = new HashMap<>();
 
     Environment() {
         this.enclosing = null;
@@ -15,8 +15,8 @@ class Environment {
         this.enclosing = enclosing;
     }
 
-    void define(Token name, Object value) {
-        values.put(name.lexeme, value);
+    void define(String name, Object value) {
+        values.put(name, value);
     }
 
     Object get(Token name) {

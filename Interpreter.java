@@ -13,7 +13,7 @@ class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
 
     Interpreter() {
         // Define the global variables here
-        globals.define(new Token(TokenType.IDENTIFIER, "clock", null, 0), new LoxCallable() {
+        globals.define("clock", new LoxCallable() {
             @Override
             public int arity() {
                 return 0;
@@ -45,7 +45,7 @@ class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
         statement.accept(this);
     }
 
-    void resolve(Expr.Variable expr, int depth) {
+    void resolve(Expr expr, int depth) {
         locals.put(expr, depth);
     }
 
@@ -110,7 +110,12 @@ class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
             }
         }
 
-        environment.define(stmt.name, null);
+        environment.define(stmt.name.lexeme, null);
+
+        if (stmt.superclass != null) {
+            environment = new Environment(environment);
+            environment.define("super", superclass);
+        }
 
         Map<String, LoxFunction> methods = new HashMap<>();
         for (Stmt.Function method : stmt.methods) {
@@ -126,6 +131,11 @@ class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
         }
 
         LoxClass klass = new LoxClass(stmt.name.lexeme, (LoxClass)superclass, methods, staticMethods);
+        
+        if (superclass != null) {
+            environment = environment.enclosing;
+        }
+
         environment.assign(stmt.name, klass);
 
         return null;
@@ -180,7 +190,7 @@ class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
     public Void visit(Stmt.VarDecl stmt) {
         Object value = evaluate(stmt.initializer);
 
-        environment.define(stmt.name, value);
+        environment.define(stmt.name.lexeme, value);
         return null;
     }
 
@@ -205,8 +215,8 @@ class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
         // put the special variable break and contine to the env
         Token breakToken = new Token(TokenType.IDENTIFIER, "break", null, 0);
         Token continueToken = new Token(TokenType.IDENTIFIER, "continue", null, 0);
-        environment.define(breakToken, false);
-        environment.define(continueToken, false);
+        environment.define("break", false);
+        environment.define("continue", false);
         
         Object condition = evaluate(stmt.condition);
         if (!(condition instanceof Boolean))
@@ -234,7 +244,7 @@ class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
     @Override
     public Void visit(Stmt.Function stmt) {
         LoxFunction function = new LoxFunction(stmt, environment, false);
-        environment.define(stmt.name, function);
+        environment.define(stmt.name.lexeme, function);
         return null;
     }
 
@@ -309,6 +319,20 @@ class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
         }
         else
             throw new RuntimeError(expr.name, expr.name.lexeme + " has no properties.");
+    }
+    
+    @Override
+    public Object visit(Expr.Super expr) {
+        int distance = locals.get(expr);
+        LoxClass superclass = (LoxClass) environment.getAt(distance, "super");
+        LoxInstance object = (LoxInstance) environment.getAt(distance - 1, "this");
+
+        LoxFunction method = superclass.findMethod(expr.method.lexeme);
+        if (method == null) {
+            throw new RuntimeError(expr.method, "Undefined property '" + expr.method.lexeme + "'.");
+        }
+
+        return method.bind(object);
     }
     
     @Override

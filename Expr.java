@@ -13,6 +13,7 @@ abstract class Expr {
         R visit(TernaryConditional expr);
         R visit(Call expr);
         R visit(Get expr);
+        R visit(Super expr);
         R visit(Lambda expr);
     }
 
@@ -140,6 +141,22 @@ abstract class Expr {
         Get(Expr object, Token name) {
             this.object = object;
             this.name = name;
+        }
+
+        @Override
+        <R> R accept(Visitor<R> visitor) {
+            return visitor.visit(this);
+        }
+    }
+
+    static class Super extends Expr {
+
+        final Token keyword;
+        final Token method;
+
+        Super(Token keyword, Token method) {
+            this.keyword = keyword;
+            this.method = method;
         }
 
         @Override

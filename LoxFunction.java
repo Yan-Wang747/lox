@@ -11,8 +11,7 @@ public class LoxFunction extends LoxLambda {
 
     LoxFunction bind(LoxInstance instance) {
         Environment environment = new Environment(closure);
-        Token thisToken = new Token(TokenType.THIS, "this", null, 0);
-        environment.define(thisToken, instance);
+        environment.define("this", instance);
         Stmt.Function expr = new Stmt.Function(funName, lambdaExpr);
         return new LoxFunction(expr, environment, isInitializer);
     }
