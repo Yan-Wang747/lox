@@ -22,24 +22,29 @@ public class LoxClass implements LoxCallable {
         this.staticMethods = staticMethods;
     }
 
-    LoxFunction findMethod(String name) {
-        if (superclass != null) {
-            return superclass.findMethod(name);
-        }
+    LoxFunction findMethod(String name, boolean superFirst) {
+        if (superFirst) {
+            if (superclass != null) {
+                LoxFunction method = superclass.findMethod(name, true);
+                if (method != null) {
+                    return method;
+                }
+            }
 
-        if (methods.containsKey(name)) {
             return methods.get(name);
         }
+        else {
+            LoxFunction method = methods.get(name);
+            if (method != null) {
+                return method;
+            }
 
-        return null;
-    }
+            if (superclass != null) {
+                return superclass.findMethod(name, false);
+            }
 
-    LoxFunction findSelfMethod(String name) {
-        if (methods.containsKey(name)) {
-            return methods.get(name);
+            return null;
         }
-
-        return null;
     }
 
     LoxFunction findStaticMethod(String name) {
@@ -50,7 +55,7 @@ public class LoxClass implements LoxCallable {
     public Object call(Interpreter interpreter, List<Object> arguments) {
         // Create a new instance of the class
         LoxInstance instance = new LoxInstance(this);
-        LoxFunction initializer = findMethod("init");
+        LoxFunction initializer = findMethod("init", false);
         if (initializer != null) {
             initializer.bind(instance).call(interpreter, arguments);
         }
@@ -60,7 +65,7 @@ public class LoxClass implements LoxCallable {
 
     @Override
     public int arity() {
-        LoxFunction initializer = findMethod("init");
+        LoxFunction initializer = findMethod("init", false);
         if (initializer == null) return 0;
         return initializer.arity();
     }
