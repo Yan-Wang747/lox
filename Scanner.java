@@ -27,7 +27,6 @@ class Scanner {
         keywords.put("or",     OR);
         keywords.put("print",  PRINT);
         keywords.put("return", RETURN);
-        keywords.put("super",  SUPER);
         keywords.put("inner",  INNER);
         keywords.put("this",   THIS);
         keywords.put("true",   TRUE);

@@ -23,13 +23,22 @@ public class LoxClass implements LoxCallable {
     }
 
     LoxFunction findMethod(String name) {
+        if (superclass != null) {
+            return superclass.findMethod(name);
+        }
+
         if (methods.containsKey(name)) {
             return methods.get(name);
         }
 
-        if (superclass != null) {
-            return superclass.findMethod(name);
+        return null;
+    }
+
+    LoxFunction findSelfMethod(String name) {
+        if (methods.containsKey(name)) {
+            return methods.get(name);
         }
+
         return null;
     }
 

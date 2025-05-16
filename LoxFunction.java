@@ -12,6 +12,7 @@ public class LoxFunction extends LoxLambda {
     LoxFunction bind(LoxInstance instance) {
         Environment environment = new Environment(closure);
         environment.define("this", instance);
+        environment.define("inner", instance.klass.findSelfMethod(funName.lexeme));
         Stmt.Function expr = new Stmt.Function(funName, lambdaExpr);
         return new LoxFunction(expr, environment, isInitializer);
     }

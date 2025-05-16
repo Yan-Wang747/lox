@@ -19,7 +19,6 @@ class GenerateAst {
             "TernaryConditional : Expr condition, Token question, Expr thenBranch, Expr elseBranch",
             "Call       : Expr callee, Token paren, List<Expr> arguments",
             "Get        : Expr object, Token name",
-            "Super      : Token keyword, Token method",
             "Lambda     : List<Token> params, List<Stmt> body, boolean isGetter"
             ));
         

@@ -282,6 +282,14 @@ class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
     @Override
     public Object visit(Expr.Call expr) {
         Object callee = evaluate(expr.callee);
+
+        if (expr.callee instanceof Expr.Variable) {
+            Token name = ((Expr.Variable)expr.callee).name;
+            if (name.lexeme.equals("inner") && callee == null) {
+                return null;
+            }
+        }
+
         List<Object> arguments = new ArrayList<>();
 
         for (Expr argument : expr.arguments) {
@@ -319,20 +327,6 @@ class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
         }
         else
             throw new RuntimeError(expr.name, expr.name.lexeme + " has no properties.");
-    }
-    
-    @Override
-    public Object visit(Expr.Super expr) {
-        int distance = locals.get(expr);
-        LoxClass superclass = (LoxClass) environment.getAt(distance, "super");
-        LoxInstance object = (LoxInstance) environment.getAt(distance - 1, "this");
-
-        LoxFunction method = superclass.findMethod(expr.method.lexeme);
-        if (method == null) {
-            throw new RuntimeError(expr.method, "Undefined property '" + expr.method.lexeme + "'.");
-        }
-
-        return method.bind(object);
     }
     
     @Override

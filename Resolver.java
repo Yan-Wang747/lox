@@ -58,13 +58,11 @@ public class Resolver implements Expr.Visitor<Void>, Stmt.Visitor<Void> {
 
             currentClass = ClassType.SUBCLASS;
             resolve(stmt.superclass);
-
-            beginScope();
-            scopes.peek().put("super", LocalVarState.DEFINED);
         }
 
         beginScope();
         scopes.peek().put("this", LocalVarState.DEFINED);
+        scopes.peek().put("inner", LocalVarState.DEFINED);
 
         for (Stmt.Function method : stmt.methods) {
             FunctionType declaration = FunctionType.METHOD;
@@ -79,10 +77,6 @@ public class Resolver implements Expr.Visitor<Void>, Stmt.Visitor<Void> {
         }
 
         endScope();
-
-        if (stmt.superclass != null) {
-            endScope();
-        }
 
         currentClass = enclosingClass;
         return null;
@@ -110,7 +104,7 @@ public class Resolver implements Expr.Visitor<Void>, Stmt.Visitor<Void> {
         Map<String, LocalVarState> scope = scopes.pop();
 
         for (Map.Entry<String, LocalVarState> entry : scope.entrySet()) {
-            if (entry.getKey().equals("this")) {
+            if (entry.getKey().equals("this") || entry.getKey().equals("inner")) {
                 continue;
             }
             if (entry.getValue() != LocalVarState.USED) {
@@ -192,19 +186,6 @@ public class Resolver implements Expr.Visitor<Void>, Stmt.Visitor<Void> {
     public Void visit(Stmt.Set stmt) {
         resolve(stmt.value);
         resolve(stmt.object);
-        return null;
-    }
-
-    @Override
-    public Void visit(Expr.Super expr) {
-        if (currentClass == ClassType.NONE) {
-            Lox.error(expr.keyword, "Cannot use 'super' outside of a class.");
-        } else if (currentClass != ClassType.SUBCLASS) {
-            Lox.error(expr.keyword, "Cannot use 'super' in a class with no superclass.");
-        } else {
-            resolveLocal(expr, expr.keyword);
-        }
-
         return null;
     }
 

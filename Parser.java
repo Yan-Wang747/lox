@@ -552,7 +552,7 @@ class Parser {
         return expr;
     }
 
-    private Expr finishCall(Expr expr) {
+    private Expr.Call finishCall(Expr expr) {
         List<Expr> arguments = new ArrayList<>();
         Token paren = null;
 
@@ -594,15 +594,14 @@ class Parser {
             return new Expr.Grouping(expr);
         }
 
-        if (match(SUPER)) {
-            Token keyword = previous();
-            consume(DOT, "Expect '.' after 'super'.");
-            Token method = consume(IDENTIFIER, "Expect superclass method name.");
-            return new Expr.Super(keyword, method);
-        }
-
         if (match(THIS)) {
             return new Expr.Variable(previous());
+        }
+
+        if (match(INNER)) {
+            Token inner = previous();
+            consume(LEFT_PAREN, "Expect '(' after 'inner'.");
+            return finishCall(new Expr.Variable(inner));
         }
 
         if (match(IDENTIFIER)) {
